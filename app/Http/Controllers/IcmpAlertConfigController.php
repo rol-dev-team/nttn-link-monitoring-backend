@@ -42,8 +42,9 @@ class IcmpAlertConfigController extends Controller
     public function store(Request $request)
     {
         $validated = $request->validate([
-            'activation_plan_id' => 'required|exists:partner_activation_plans,id',
-            'latency_threshold_ms' => 'required|numeric',
+            'activation_plan_id' => 'required|exists:partner_activation_plans,id|unique:icmp_alert_configs,activation_plan_id',
+            'latency_threshold_ms' => 'required|numeric|min:1',
+            'is_active' => 'required|boolean',
         ]);
 
         $data = IcmpAlertConfig::create($validated);
@@ -55,7 +56,6 @@ class IcmpAlertConfigController extends Controller
         ], 201);
     }
 
-    // PUT/PATCH - update ICMP alert config
     public function update(Request $request, $id)
     {
         $data = IcmpAlertConfig::find($id);
@@ -68,9 +68,11 @@ class IcmpAlertConfigController extends Controller
         }
 
         $validated = $request->validate([
-            'activation_plan_id' => 'required|exists:partner_activation_plans,id',
-            'latency_threshold_ms' => 'required|numeric',
+            'activation_plan_id' => 'required|exists:partner_activation_plans,id|unique:icmp_alert_configs,activation_plan_id,' . $id,
+            'latency_threshold_ms' => 'required|numeric|min:1',
+            'is_active' => 'required|boolean',
         ]);
+
 
         $data->update($validated);
 

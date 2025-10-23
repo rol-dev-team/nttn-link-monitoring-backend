@@ -14,14 +14,15 @@ class IcmpAlertConfig extends Model
     protected $fillable = [
         'activation_plan_id',
         'latency_threshold_ms',
+        'is_active',
     ];
 
-    /**
-     * Relationship: belongs to PartnerActivationPlan
-     */
+    protected $casts = [
+        'is_active' => 'boolean',
+    ];
+
     public function activationPlan()
     {
         return $this->belongsTo(PartnerActivationPlan::class, 'activation_plan_id');
     }
 }
-

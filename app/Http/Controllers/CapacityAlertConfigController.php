@@ -42,7 +42,7 @@ class CapacityAlertConfigController extends Controller
     public function store(Request $request)
     {
         $validated = $request->validate([
-            'activation_plan_id' => 'required|exists:partner_activation_plans,id',
+            'activation_plan_id' => 'required|exists:partner_activation_plans,id|unique:capacity_alert_configs,activation_plan_id',
             'max_threshold_mbps' => 'required|numeric',
             'max_frequency_per_day' => 'required|integer',
             'max_consecutive_days' => 'required|integer',
@@ -60,7 +60,6 @@ class CapacityAlertConfigController extends Controller
         ], 201);
     }
 
-    // PUT/PATCH - update capacity alert config
     public function update(Request $request, $id)
     {
         $data = CapacityAlertConfig::find($id);
@@ -73,7 +72,7 @@ class CapacityAlertConfigController extends Controller
         }
 
         $validated = $request->validate([
-            'activation_plan_id' => 'required|exists:partner_activation_plans,id',
+            'activation_plan_id' => 'required|exists:partner_activation_plans,id|unique:capacity_alert_configs,activation_plan_id,' . $id,
             'max_threshold_mbps' => 'required|numeric',
             'max_frequency_per_day' => 'required|integer',
             'max_consecutive_days' => 'required|integer',
@@ -90,6 +89,7 @@ class CapacityAlertConfigController extends Controller
             'data' => $data->load('activationPlan')
         ], 200);
     }
+
 
     // DELETE - remove capacity alert config
     public function destroy($id)

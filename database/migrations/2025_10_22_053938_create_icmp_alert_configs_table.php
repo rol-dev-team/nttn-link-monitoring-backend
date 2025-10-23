@@ -15,6 +15,7 @@ return new class extends Migration
             $table->id();
             $table->unsignedBigInteger('activation_plan_id');
             $table->decimal('latency_threshold_ms', 10, 2);
+            $table->boolean('is_active')->default(true);
             $table->timestamps();
 
             // Foreign key to partner_activation_plans
