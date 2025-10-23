@@ -30,7 +30,7 @@ return new class extends Migration
 
             $table->foreign('radius_server_id')
                 ->references('id')
-                ->on('adius_server_ips')
+                ->on('radius_server_ips')
                 ->onDelete('set null');
         });
     }

@@ -16,176 +16,7 @@ use App\Http\Controllers\PartnerDropDeviceConfigController;
 use App\Http\Controllers\CapacityAlertConfigController;
 use App\Http\Controllers\IcmpAlertConfigController;
 
-Route::get('/icmp-alert-configs', [IcmpAlertConfigController::class, 'index'])
-    ->middleware('permission:icmp_alert_configs.index')
-    ->name('icmp_alert_configs.index');
 
-Route::get('/icmp-alert-configs/{id}', [IcmpAlertConfigController::class, 'show'])
-    ->middleware('permission:icmp_alert_configs.show')
-    ->name('icmp_alert_configs.show');
-
-Route::post('/icmp-alert-configs', [IcmpAlertConfigController::class, 'store'])
-    ->middleware('permission:icmp_alert_configs.store')
-    ->name('icmp_alert_configs.store');
-
-Route::put('/icmp-alert-configs/{id}', [IcmpAlertConfigController::class, 'update'])
-    ->middleware('permission:icmp_alert_configs.update')
-    ->name('icmp_alert_configs.update');
-
-Route::delete('/icmp-alert-configs/{id}', [IcmpAlertConfigController::class, 'destroy'])
-    ->middleware('permission:icmp_alert_configs.destroy')
-    ->name('icmp_alert_configs.destroy');
-
-
-
-Route::get('/capacity-alert-configs', [CapacityAlertConfigController::class, 'index'])
-    ->middleware('permission:capacity_alert_configs.index')
-    ->name('capacity_alert_configs.index');
-
-Route::get('/capacity-alert-configs/{id}', [CapacityAlertConfigController::class, 'show'])
-    ->middleware('permission:capacity_alert_configs.show')
-    ->name('capacity_alert_configs.show');
-
-Route::post('/capacity-alert-configs', [CapacityAlertConfigController::class, 'store'])
-    ->middleware('permission:capacity_alert_configs.store')
-    ->name('capacity_alert_configs.store');
-
-Route::put('/capacity-alert-configs/{id}', [CapacityAlertConfigController::class, 'update'])
-    ->middleware('permission:capacity_alert_configs.update')
-    ->name('capacity_alert_configs.update');
-
-Route::delete('/capacity-alert-configs/{id}', [CapacityAlertConfigController::class, 'destroy'])
-    ->middleware('permission:capacity_alert_configs.destroy')
-    ->name('capacity_alert_configs.destroy');
-
-
-Route::get('/partner-drop-device-configs', [PartnerDropDeviceConfigController::class, 'index'])
-    ->middleware('permission:partner_drop_device_configs.index')
-    ->name('partner_drop_device_configs.index');
-
-Route::get('/partner-drop-device-configs/{id}', [PartnerDropDeviceConfigController::class, 'show'])
-    ->middleware('permission:partner_drop_device_configs.show')
-    ->name('partner_drop_device_configs.show');
-
-Route::post('/partner-drop-device-configs', [PartnerDropDeviceConfigController::class, 'store'])
-    ->middleware('permission:partner_drop_device_configs.store')
-    ->name('partner_drop_device_configs.store');
-
-Route::put('/partner-drop-device-configs/{id}', [PartnerDropDeviceConfigController::class, 'update'])
-    ->middleware('permission:partner_drop_device_configs.update')
-    ->name('partner_drop_device_configs.update');
-
-Route::delete('/partner-drop-device-configs/{id}', [PartnerDropDeviceConfigController::class, 'destroy'])
-    ->middleware('permission:partner_drop_device_configs.destroy')
-    ->name('partner_drop_device_configs.destroy');
-
-
-Route::get('/partner-interface-configs', [PartnerInterfaceConfigController::class, 'index'])
-    ->middleware('permission:partner_interface_configs.index')
-    ->name('partner_interface_configs.index');
-
-Route::get('/partner-interface-configs/{id}', [PartnerInterfaceConfigController::class, 'show'])
-    ->middleware('permission:partner_interface_configs.show')
-    ->name('partner_interface_configs.show');
-
-Route::post('/partner-interface-configs', [PartnerInterfaceConfigController::class, 'store'])
-    ->middleware('permission:partner_interface_configs.store')
-    ->name('partner_interface_configs.store');
-
-Route::put('/partner-interface-configs/{id}', [PartnerInterfaceConfigController::class, 'update'])
-    ->middleware('permission:partner_interface_configs.update')
-    ->name('partner_interface_configs.update');
-
-Route::delete('/partner-interface-configs/{id}', [PartnerInterfaceConfigController::class, 'destroy'])
-    ->middleware('permission:partner_interface_configs.destroy')
-    ->name('partner_interface_configs.destroy');
-
-
-Route::get('/partner-activation-plans', [PartnerActivationPlanController::class, 'index'])
-    ->middleware('permission:partner_activation_plans.index')
-    ->name('partner_activation_plans.index');
-
-Route::get('/partner-activation-plans/{id}', [PartnerActivationPlanController::class, 'show'])
-    ->middleware('permission:partner_activation_plans.show')
-    ->name('partner_activation_plans.show');
-
-Route::post('/partner-activation-plans', [PartnerActivationPlanController::class, 'store'])
-    ->middleware('permission:partner_activation_plans.store')
-    ->name('partner_activation_plans.store');
-
-Route::put('/partner-activation-plans/{id}', [PartnerActivationPlanController::class, 'update'])
-    ->middleware('permission:partner_activation_plans.update')
-    ->name('partner_activation_plans.update');
-
-Route::delete('/partner-activation-plans/{id}', [PartnerActivationPlanController::class, 'destroy'])
-    ->middleware('permission:partner_activation_plans.destroy')
-    ->name('partner_activation_plans.destroy');
-
-
-
-Route::get('/partner-infos', [PartnerInfoController::class, 'index'])
-    ->middleware('permission:partner_infos.index')
-    ->name('partner_infos.index');
-
-Route::get('/partner-infos/{id}', [PartnerInfoController::class, 'show'])
-    ->middleware('permission:partner_infos.show')
-    ->name('partner_infos.show');
-
-Route::post('/partner-infos', [PartnerInfoController::class, 'store'])
-    ->middleware('permission:partner_infos.store')
-    ->name('partner_infos.store');
-
-Route::put('/partner-infos/{id}', [PartnerInfoController::class, 'update'])
-    ->middleware('permission:partner_infos.update')
-    ->name('partner_infos.update');
-
-Route::delete('/partner-infos/{id}', [PartnerInfoController::class, 'destroy'])
-    ->middleware('permission:partner_infos.destroy')
-    ->name('partner_infos.destroy');
-
-
-
-Route::get('/radius-server-ips', [RadiusServerIpController::class, 'index'])
-    ->middleware('permission:radius_server_ips.index')
-    ->name('adius_server_ips.index');
-
-Route::get('/adius-server-ips/{id}', [RadiusServerIpController::class, 'show'])
-    ->middleware('permission:radius_server_ips.show')
-    ->name('radius_server_ips.show');
-
-Route::post('/radius-server-ips', [RadiusServerIpController::class, 'store'])
-    ->middleware('permission:radius_server_ips.store')
-    ->name('radius_server_ips.store');
-
-Route::put('/radius-server-ips/{id}', [RadiusServerIpController::class, 'update'])
-    ->middleware('permission:radius_server_ips.update')
-    ->name('radius_server_ips.update');
-
-Route::delete('/radius-server-ips/{id}', [RadiusServerIpController::class, 'destroy'])
-    ->middleware('permission:radius_server_ips.destroy')
-    ->name('radius_server_ips.destroy');
-
-
-
-Route::get('/technical-kams', [TechnicalKamController::class, 'index'])
-    ->middleware('permission:technical_kams.index')
-    ->name('technical_kams.index');
-
-Route::get('/technical-kams/{id}', [TechnicalKamController::class, 'show'])
-    ->middleware('permission:technical_kams.show')
-    ->name('technical_kams.show');
-
-Route::post('/technical-kams', [TechnicalKamController::class, 'store'])
-    ->middleware('permission:technical_kams.store')
-    ->name('technical_kams.store');
-
-Route::put('/technical-kams/{id}', [TechnicalKamController::class, 'update'])
-    ->middleware('permission:technical_kams.update')
-    ->name('technical_kams.update');
-
-Route::delete('/technical-kams/{id}', [TechnicalKamController::class, 'destroy'])
-    ->middleware('permission:technical_kams.destroy')
-    ->name('technical_kams.destroy');
 
 // ----------------------------
 // Public routes (no auth) - MINIMAL SET
@@ -204,6 +35,180 @@ Route::middleware('auth:sanctum')->group(function () {
 
     // Logout
     Route::post('/logout', [AuthController::class, 'logout'])->name('auth.logout');
+
+
+
+    Route::get('/icmp-alert-configs', [IcmpAlertConfigController::class, 'index'])
+        ->middleware('permission:icmp_alert_configs.index')
+        ->name('icmp_alert_configs.index');
+
+    Route::get('/icmp-alert-configs/{id}', [IcmpAlertConfigController::class, 'show'])
+        ->middleware('permission:icmp_alert_configs.show')
+        ->name('icmp_alert_configs.show');
+
+    Route::post('/icmp-alert-configs', [IcmpAlertConfigController::class, 'store'])
+        ->middleware('permission:icmp_alert_configs.store')
+        ->name('icmp_alert_configs.store');
+
+    Route::put('/icmp-alert-configs/{id}', [IcmpAlertConfigController::class, 'update'])
+        ->middleware('permission:icmp_alert_configs.update')
+        ->name('icmp_alert_configs.update');
+
+    Route::delete('/icmp-alert-configs/{id}', [IcmpAlertConfigController::class, 'destroy'])
+        ->middleware('permission:icmp_alert_configs.destroy')
+        ->name('icmp_alert_configs.destroy');
+
+
+
+    Route::get('/capacity-alert-configs', [CapacityAlertConfigController::class, 'index'])
+        ->middleware('permission:capacity_alert_configs.index')
+        ->name('capacity_alert_configs.index');
+
+    Route::get('/capacity-alert-configs/{id}', [CapacityAlertConfigController::class, 'show'])
+        ->middleware('permission:capacity_alert_configs.show')
+        ->name('capacity_alert_configs.show');
+
+    Route::post('/capacity-alert-configs', [CapacityAlertConfigController::class, 'store'])
+        ->middleware('permission:capacity_alert_configs.store')
+        ->name('capacity_alert_configs.store');
+
+    Route::put('/capacity-alert-configs/{id}', [CapacityAlertConfigController::class, 'update'])
+        ->middleware('permission:capacity_alert_configs.update')
+        ->name('capacity_alert_configs.update');
+
+    Route::delete('/capacity-alert-configs/{id}', [CapacityAlertConfigController::class, 'destroy'])
+        ->middleware('permission:capacity_alert_configs.destroy')
+        ->name('capacity_alert_configs.destroy');
+
+
+    Route::get('/partner-drop-device-configs', [PartnerDropDeviceConfigController::class, 'index'])
+        ->middleware('permission:partner_drop_device_configs.index')
+        ->name('partner_drop_device_configs.index');
+
+    Route::get('/partner-drop-device-configs/{id}', [PartnerDropDeviceConfigController::class, 'show'])
+        ->middleware('permission:partner_drop_device_configs.show')
+        ->name('partner_drop_device_configs.show');
+
+    Route::post('/partner-drop-device-configs', [PartnerDropDeviceConfigController::class, 'store'])
+        ->middleware('permission:partner_drop_device_configs.store')
+        ->name('partner_drop_device_configs.store');
+
+    Route::put('/partner-drop-device-configs/{id}', [PartnerDropDeviceConfigController::class, 'update'])
+        ->middleware('permission:partner_drop_device_configs.update')
+        ->name('partner_drop_device_configs.update');
+
+    Route::delete('/partner-drop-device-configs/{id}', [PartnerDropDeviceConfigController::class, 'destroy'])
+        ->middleware('permission:partner_drop_device_configs.destroy')
+        ->name('partner_drop_device_configs.destroy');
+
+
+    Route::get('/partner-interface-configs', [PartnerInterfaceConfigController::class, 'index'])
+        ->middleware('permission:partner_interface_configs.index')
+        ->name('partner_interface_configs.index');
+
+    Route::get('/partner-interface-configs/{id}', [PartnerInterfaceConfigController::class, 'show'])
+        ->middleware('permission:partner_interface_configs.show')
+        ->name('partner_interface_configs.show');
+
+    Route::post('/partner-interface-configs', [PartnerInterfaceConfigController::class, 'store'])
+        ->middleware('permission:partner_interface_configs.store')
+        ->name('partner_interface_configs.store');
+
+    Route::put('/partner-interface-configs/{id}', [PartnerInterfaceConfigController::class, 'update'])
+        ->middleware('permission:partner_interface_configs.update')
+        ->name('partner_interface_configs.update');
+
+    Route::delete('/partner-interface-configs/{id}', [PartnerInterfaceConfigController::class, 'destroy'])
+        ->middleware('permission:partner_interface_configs.destroy')
+        ->name('partner_interface_configs.destroy');
+
+
+    Route::get('/partner-activation-plans', [PartnerActivationPlanController::class, 'index'])
+        ->middleware('permission:partner_activation_plans.index')
+        ->name('partner_activation_plans.index');
+
+    Route::get('/partner-activation-plans/{id}', [PartnerActivationPlanController::class, 'show'])
+        ->middleware('permission:partner_activation_plans.show')
+        ->name('partner_activation_plans.show');
+
+    Route::post('/partner-activation-plans', [PartnerActivationPlanController::class, 'store'])
+        ->middleware('permission:partner_activation_plans.store')
+        ->name('partner_activation_plans.store');
+
+    Route::put('/partner-activation-plans/{id}', [PartnerActivationPlanController::class, 'update'])
+        ->middleware('permission:partner_activation_plans.update')
+        ->name('partner_activation_plans.update');
+
+    Route::delete('/partner-activation-plans/{id}', [PartnerActivationPlanController::class, 'destroy'])
+        ->middleware('permission:partner_activation_plans.destroy')
+        ->name('partner_activation_plans.destroy');
+
+
+
+    Route::get('/partner-infos', [PartnerInfoController::class, 'index'])
+        ->middleware('permission:partner_infos.index')
+        ->name('partner_infos.index');
+
+    Route::get('/partner-infos/{id}', [PartnerInfoController::class, 'show'])
+        ->middleware('permission:partner_infos.show')
+        ->name('partner_infos.show');
+
+    Route::post('/partner-infos', [PartnerInfoController::class, 'store'])
+        ->middleware('permission:partner_infos.store')
+        ->name('partner_infos.store');
+
+    Route::put('/partner-infos/{id}', [PartnerInfoController::class, 'update'])
+        ->middleware('permission:partner_infos.update')
+        ->name('partner_infos.update');
+
+    Route::delete('/partner-infos/{id}', [PartnerInfoController::class, 'destroy'])
+        ->middleware('permission:partner_infos.destroy')
+        ->name('partner_infos.destroy');
+
+
+
+    Route::get('/radius-server-ips', [RadiusServerIpController::class, 'index'])
+        ->middleware('permission:radius_server_ips.index')
+        ->name('radius_server_ips.index');
+
+    Route::get('/radius-server-ips/{id}', [RadiusServerIpController::class, 'show'])
+        ->middleware('permission:radius_server_ips.show')
+        ->name('radius_server_ips.show');
+
+    Route::post('/radius-server-ips', [RadiusServerIpController::class, 'store'])
+        ->middleware('permission:radius_server_ips.store')
+        ->name('radius_server_ips.store');
+
+    Route::put('/radius-server-ips/{id}', [RadiusServerIpController::class, 'update'])
+        ->middleware('permission:radius_server_ips.update')
+        ->name('radius_server_ips.update');
+
+    Route::delete('/radius-server-ips/{id}', [RadiusServerIpController::class, 'destroy'])
+        ->middleware('permission:radius_server_ips.destroy')
+        ->name('radius_server_ips.destroy');
+
+
+
+    Route::get('/technical-kams', [TechnicalKamController::class, 'index'])
+        ->middleware('permission:technical_kams.index')
+        ->name('technical_kams.index');
+
+    Route::get('/technical-kams/{id}', [TechnicalKamController::class, 'show'])
+        ->middleware('permission:technical_kams.show')
+        ->name('technical_kams.show');
+
+    Route::post('/technical-kams', [TechnicalKamController::class, 'store'])
+        ->middleware('permission:technical_kams.store')
+        ->name('technical_kams.store');
+
+
+    Route::put('/technical-kams/{id}', [TechnicalKamController::class, 'update'])
+        ->middleware('permission:technical_kams.update')
+        ->name('technical_kams.update');
+
+    Route::delete('/technical-kams/{id}', [TechnicalKamController::class, 'destroy'])
+        ->middleware('permission:technical_kams.destroy')
+        ->name('technical_kams.destroy');
 
     // ----------------------------
     // Users

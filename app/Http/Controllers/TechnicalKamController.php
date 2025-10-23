@@ -10,7 +10,8 @@ class TechnicalKamController extends Controller
     // GET all records
     public function index()
     {
-        $data = TechnicalKam::all();
+//        $data = TechnicalKam::all();
+        $data = TechnicalKam::where('status', 'active')->get();
         return response()->json([
             'status' => true,
             'message' => 'Retrieved successfully.',

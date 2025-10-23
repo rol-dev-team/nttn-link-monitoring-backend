@@ -10,7 +10,9 @@ class RadiusServerIpController extends Controller
     // List all records
     public function index()
     {
-        $data = RadiusServerIp::all();
+//        $data = RadiusServerIp::all();
+        $data = RadiusServerIp::where('status', 'active')->get();
+
 
         return response()->json([
             'status' => true,

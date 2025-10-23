@@ -48,7 +48,7 @@ class PartnerInfoController extends Controller
             'contact_number' => 'nullable|string|max:50',
             'router_identity' => 'nullable|string|max:255',
             'technical_kam_id' => 'nullable|exists:technical_kams,id',
-            'radius_server_id' => 'nullable|exists:adius_server_ips,id',
+            'radius_server_id' => 'nullable|exists:radius_server_ips,id', // Fixed typo here
         ]);
 
         $data = PartnerInfo::create($validated);
@@ -79,7 +79,7 @@ class PartnerInfoController extends Controller
             'contact_number' => 'nullable|string|max:50',
             'router_identity' => 'nullable|string|max:255',
             'technical_kam_id' => 'nullable|exists:technical_kams,id',
-            'radius_server_id' => 'nullable|exists:adius_server_ips,id',
+            'radius_server_id' => 'nullable|exists:radius_server_ips,id', // Fixed here too
         ]);
 
         $data->update($validated);
