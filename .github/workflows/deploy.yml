@@ -21,7 +21,7 @@ jobs:
           extensions: bcmath, curl, gd, intl, mbstring, pdo_mysql, pdo_pgsql, zip, opcache
 
       - name: Install Composer Dependencies
-        run: composer install --no-dev --optimize-autoloader
+        run: composer install --no-dev --optimize-autoloader --no-scripts
 
       - name: Sync Project, Set Permissions, and Cache
         uses: appleboy/ssh-action@v1.0.3
