@@ -13,6 +13,7 @@ class PartnerActivationPlan extends Model
 
     protected $fillable = [
         'work_order_id',
+        'client_id',
         'int_routing_ip',
         'ggc_routing_ip',
         'fna_routing_ip',

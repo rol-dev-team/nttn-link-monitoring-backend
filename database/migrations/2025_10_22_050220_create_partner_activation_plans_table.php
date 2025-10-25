@@ -14,6 +14,7 @@ return new class extends Migration
         Schema::create('partner_activation_plans', function (Blueprint $table) {
             $table->id();
             $table->string('work_order_id')->nullable();
+            $table->string('client_id')->nullable();
             $table->string('int_routing_ip')->nullable();
             $table->string('ggc_routing_ip')->nullable();
             $table->string('fna_routing_ip')->nullable();

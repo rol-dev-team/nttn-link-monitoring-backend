@@ -14,12 +14,12 @@ class IcmpAlertConfig extends Model
     protected $fillable = [
         'activation_plan_id',
         'latency_threshold_ms',
-        'is_active',
+//        'is_active',
     ];
 
-    protected $casts = [
-        'is_active' => 'boolean',
-    ];
+//    protected $casts = [
+//        'is_active' => 'boolean',
+//    ];
 
     public function activationPlan()
     {
