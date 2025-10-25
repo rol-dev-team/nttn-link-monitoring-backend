@@ -10,11 +10,11 @@ use DateTimeZone;
 
 class RrdController extends Controller
 {
-    
-    const RRDTOOL_EXECUTABLE = '/usr/bin/rrdtool'; 
-    
-    const OCTETS_TO_MBPS = 8 / 1000000; 
-    
+
+    const RRDTOOL_EXECUTABLE = '/usr/bin/rrdtool';
+
+    const OCTETS_TO_MBPS = 8 / 1000000;
+
     protected function parseRrdFetchOutput(string $output): array
     {
         if (empty($output)) {
@@ -35,10 +35,10 @@ class RrdController extends Controller
             $values = preg_split('/\s+/', trim($parts[1]));
 
             $row = [
-                'timestamp_unix' => (int)$unixTimestamp, 
-                'timestamp_formatted' => $formattedDateTime 
+                'timestamp_unix' => (int)$unixTimestamp,
+                'timestamp_formatted' => $formattedDateTime
             ];
-            
+
             foreach ($dataSources as $index => $dsName) {
                 // Convert NaN/null values from RRD output to PHP null
                 $row[$dsName] = is_numeric($values[$index]) ? (float)$values[$index] : null;
@@ -48,31 +48,32 @@ class RrdController extends Controller
         return $data;
     }
 
+
     public function getPortData(string $startDateString = null, string $endDateString = null)
     {
-        
+
         // $startDateString = $startDateString ?? '2025-10-01 01:05:00';
-        // $endDateString   = $endDateString ?? '2025-10-02 01:05:00'; 
+        // $endDateString   = $endDateString ?? '2025-10-02 01:05:00';
         $startDateString = $startDateString ?? '2025-10-01 01:05:00';
         $endDateString = $endDateString ?? '2025-10-02 01:05:00';
         // $startDateString = '2025-10-01 01:05:00';
         // $endDateString   = '2025-10-02 01:05:00';
-        
+
         $rrdFilePath = '/var/www/html/backend_core_automation/storage/rrd/rrd/172.24.6.16/port-id2664.rrd';
-        
-        $filename = basename($rrdFilePath); 
-        $port_id = (int)preg_replace('/[^0-9]/', '', $filename); 
-        
+
+        $filename = basename($rrdFilePath);
+        $port_id = (int)preg_replace('/[^0-9]/', '', $filename);
+
         $path_parts = explode('/', $rrdFilePath);
-        $host_ip = $path_parts[count($path_parts) - 2]; 
-        
+        $host_ip = $path_parts[count($path_parts) - 2];
+
         if (filter_var($host_ip, FILTER_VALIDATE_IP) === false) {
             $host_ip = 'Host IP not found';
         }
 
         $resolution = '-r 300';
 
-       
+
         $startUnix = strtotime($startDateString);
         $endUnix = strtotime($endDateString);
 
@@ -82,16 +83,16 @@ class RrdController extends Controller
                 'message' => 'Invalid datetime format or range provided. Start time must be before end time.'
             ], 400);
         }
-        
+
         $startTime = '-s ' . $startUnix;
         $endTime = '-e ' . $endUnix;
-        
-        $commandAvg = self::RRDTOOL_EXECUTABLE 
-                    . " fetch \"$rrdFilePath\" AVERAGE $resolution $startTime $endTime";
-        
-        
-        $commandMax = self::RRDTOOL_EXECUTABLE 
-                    . " fetch \"$rrdFilePath\" MAX $resolution $startTime $endTime";
+
+        $commandAvg = self::RRDTOOL_EXECUTABLE
+            . " fetch \"$rrdFilePath\" AVERAGE $resolution $startTime $endTime";
+
+
+        $commandMax = self::RRDTOOL_EXECUTABLE
+            . " fetch \"$rrdFilePath\" MAX $resolution $startTime $endTime";
 
         $dataOutputAvg = shell_exec($commandAvg);
         $dataOutputMax = shell_exec($commandMax);
@@ -106,16 +107,16 @@ class RrdController extends Controller
         // --- Data Parsing and Summary ---
         $parsedDataAvg = $this->parseRrdFetchOutput($dataOutputAvg);
         $parsedDataMax = $this->parseRrdFetchOutput($dataOutputMax);
-        
+
         $trafficSummary = $this->getTrafficSummary($parsedDataAvg, $parsedDataMax);
 
-        
+
         return response()->json([
             'status' => 'success',
-            'host_ip' => $host_ip, 
+            'host_ip' => $host_ip,
             'port_id' => $port_id,
             'data_source' => $rrdFilePath,
-            'traffic_summary' => $trafficSummary, 
+            'traffic_summary' => $trafficSummary,
             'results' => $parsedDataAvg,
             'requested_range' => [
                 'start_unix' => $startUnix,
@@ -123,7 +124,7 @@ class RrdController extends Controller
             ]
         ]);
     }
-    
+
     protected function getTrafficSummary(array $avgData, array $maxData)
     {
         if (empty($avgData)) {
@@ -138,22 +139,22 @@ class RrdController extends Controller
 
         $totalInBytes = 0.0;
         $totalOutBytes = 0.0;
-        $maxInRate = 0.0; 
-        $maxOutRate = 0.0; 
+        $maxInRate = 0.0;
+        $maxOutRate = 0.0;
         $maxInRateTime = null;
         $maxOutRateTime = null;
         $lastUnixTimestamp = null;
-        
+
         $minTime = $avgData[0]['timestamp_formatted'] ?? null;
         $maxTime = end($avgData)['timestamp_formatted'] ?? null;
-        
-        
+
+
         foreach ($avgData as $row) {
             $currentUnixTimestamp = $row['timestamp_unix'];
-            
+
             if ($lastUnixTimestamp !== null) {
                 $timeElapsed = $currentUnixTimestamp - $lastUnixTimestamp;
-                
+
                 if (isset($row['INOCTETS']) && is_numeric($row['INOCTETS']) && $row['INOCTETS'] !== null) {
                     $totalInBytes += (float)$row['INOCTETS'] * $timeElapsed;
                 }
@@ -163,32 +164,32 @@ class RrdController extends Controller
             }
             $lastUnixTimestamp = $currentUnixTimestamp;
         }
-        
-        
+
+
         foreach ($maxData as $row) {
-            $currentTime = $row['timestamp_formatted']; 
-            
-            
+            $currentTime = $row['timestamp_formatted'];
+
+
             if (isset($row['INOCTETS']) && is_numeric($row['INOCTETS']) && $row['INOCTETS'] !== null) {
                 $currentInRate = (float)$row['INOCTETS'];
                 if ($currentInRate > $maxInRate) {
                     $maxInRate = $currentInRate;
-                    $maxInRateTime = $currentTime; 
+                    $maxInRateTime = $currentTime;
                 }
             }
-            
-            
+
+
             if (isset($row['OUTOCTETS']) && is_numeric($row['OUTOCTETS']) && $row['OUTOCTETS'] !== null) {
                 $currentOutRate = (float)$row['OUTOCTETS'];
                 if ($currentOutRate > $maxOutRate) {
                     $maxOutRate = $currentOutRate;
-                    $maxOutRateTime = $currentTime; 
+                    $maxOutRateTime = $currentTime;
                 }
             }
         }
-        
-        
-        $BYTES_PER_GB = 1024 * 1024 * 1024; 
+
+
+        $BYTES_PER_GB = 1024 * 1024 * 1024;
 
         return [
             'total_in' => [
@@ -201,7 +202,7 @@ class RrdController extends Controller
             ],
             'max_rate' => [
                 // Convert B/s to Mbps (Megabits per second)
-                'in_mbps' => round($maxInRate * self::OCTETS_TO_MBPS, 2), 
+                'in_mbps' => round($maxInRate * self::OCTETS_TO_MBPS, 2),
                 'out_mbps' => round($maxOutRate * self::OCTETS_TO_MBPS, 2),
                 'in_peak_time' => $maxInRateTime,
                 'out_peak_time' => $maxOutRateTime
@@ -213,20 +214,22 @@ class RrdController extends Controller
             ]
         ];
     }
-    
+
+
+
     public function getDeviceCpuData(string $startDateString = null, string $endDateString = null): JsonResponse
     {
-        
+
         $startDateString = $startDateString ?? '2025-10-01 01:05:00';
-        $endDateString = $endDateString ?? '2025-10-02 01:05:00'; 
-        
-        
+        $endDateString = $endDateString ?? '2025-10-02 01:05:00';
+
+
         $rrdFileBaseDir = '/var/www/html/backend_core_automation/storage/rrd/rrd/';
-        
+
         $host_ip = '172.24.6.16';
         $cpuRrdDirectory = $rrdFileBaseDir . $host_ip;
 
-        
+
         $startUnix = strtotime($startDateString);
         $endUnix = strtotime($endDateString);
 
@@ -236,15 +239,15 @@ class RrdController extends Controller
                 'message' => 'Invalid datetime format or range provided.'
             ], 400);
         }
-        
+
         $startTime = '-s ' . $startUnix;
         $endTime = '-e ' . $endUnix;
         $resolution = '-r 300';
 
-        
+
         $allCpuFiles = glob($cpuRrdDirectory . '/processor-hr-*.rrd');
         $numProcessors = count($allCpuFiles);
-        $allCpuData = []; 
+        $allCpuData = [];
 
         if ($numProcessors === 0) {
             return response()->json([
@@ -254,19 +257,19 @@ class RrdController extends Controller
         }
 
         foreach ($allCpuFiles as $cpuFilePath) {
-            $command = self::RRDTOOL_EXECUTABLE 
-                      . " fetch \"$cpuFilePath\" AVERAGE $resolution $startTime $endTime";
-            
+            $command = self::RRDTOOL_EXECUTABLE
+                . " fetch \"$cpuFilePath\" AVERAGE $resolution $startTime $endTime";
+
             $output = shell_exec($command);
-            
+
             if (!empty($output)) {
                 $parsedData = $this->parseRrdFetchOutput($output);
-                
+
                 foreach ($parsedData as $row) {
                     $timestamp = $row['timestamp_unix'];
-                    
-                    $usage = $row['usage'] ?? 0.0; 
-                    
+
+                    $usage = $row['usage'] ?? 0.0;
+
                     if (!isset($allCpuData[$timestamp])) {
                         $allCpuData[$timestamp] = [
                             'timestamp_unix' => $timestamp,
@@ -275,7 +278,7 @@ class RrdController extends Controller
                             'count' => 0,
                         ];
                     }
-                    
+
                     if (is_numeric($usage) && $usage !== null) {
                         $allCpuData[$timestamp]['total_usage'] += (float)$usage;
                         $allCpuData[$timestamp]['count']++;
@@ -283,15 +286,15 @@ class RrdController extends Controller
                 }
             }
         }
-        
-        
+
+
         $aggregatedCpuResults = [];
         $maxLoadPeak = 0.0;
         $maxLoadTime = null;
 
         foreach ($allCpuData as $data) {
             if ($data['count'] > 0) {
-                
+
                 $averageCpuPercent = round($data['total_usage'] / $data['count'], 2);
 
                 $aggregatedCpuResults[] = [
@@ -300,63 +303,370 @@ class RrdController extends Controller
                     'average_cpu_percent' => $averageCpuPercent,
                 ];
 
-                
+
                 if ($averageCpuPercent > $maxLoadPeak) {
                     $maxLoadPeak = $averageCpuPercent;
                     $maxLoadTime = $data['timestamp_formatted'];
                 }
             }
         }
-        
-        
+
+
         $allAverages = array_column($aggregatedCpuResults, 'average_cpu_percent');
-        
+
         $summary = [
             'processor_count' => $numProcessors,
             'average_load_overall' => !empty($allAverages) ? round(array_sum($allAverages) / count($allAverages), 2) : 0.0,
             'max_load_peak' => $maxLoadPeak,
-            'max_load_peak_time' => $maxLoadTime, 
+            'max_load_peak_time' => $maxLoadTime,
         ];
 
         return response()->json([
             'status' => 'success',
-            'host_ip' => $host_ip, 
+            'host_ip' => $host_ip,
             'metric_type' => 'Aggregated_CPU_Usage',
             'requested_range' => [
                 'start_datetime' => $startDateString,
                 'end_datetime' => $endDateString,
             ],
             'cpu_summary' => $summary,
-            'results' => $aggregatedCpuResults, 
+            'results' => $aggregatedCpuResults,
         ]);
     }
 
 
-    public function getIcmpPerformanceData(string $startDateString = null, string $endDateString = null): JsonResponse
-    {
-        
-        $rrdFileBaseDir = '/var/www/html/backend_core_automation/storage/rrd/rrd/';
-        $rrdFileName = 'icmp-perf.rrd';
-        $defaultHostIp = '172.24.6.16'; 
-        $rrdFilePath = $rrdFileBaseDir . $defaultHostIp . '/' . $rrdFileName;
-        
-        
-        $dsnListFull = 'avg max min xmt rcv'; 
-        $dsnListAvg = 'avg'; 
-        $fullResolution = '-r 300';
-        $hourResolution = '-r 3600'; // 1-hour resolution
 
-       
-        
-        $startDateString = $startDateString ?? '2025-10-14 17:25:00'; 
-        $endDateString   = $endDateString ?? '2025-10-15 17:25:00'; 
-        
-        
-        $localTimezone = new DateTimeZone('Asia/Dhaka'); 
+    public function getMempoolPerformanceData(string $startDateString = null, string $endDateString = null): JsonResponse
+    {
+        // --- 1. Configuration & Path Setup ---
+        // Note: The RRD file path is based on the provided RRDtool command.
+        $rrdFileBaseDir = '/var/www/html/backend_core_automation/storage/rrd/rrd/172.24.6.16/';
+        $rrdFileName = 'mempool-hrstorage-system-65536.rrd';
+        $defaultHostIp = '172.24.6.16';
+        $rrdFilePath = $rrdFileBaseDir . $rrdFileName;
+
+        // DSNs required: used and free for total/percent calculation
+        $dsnList = 'used free';
+        $resolution = '-r 300'; // Standard 5-minute resolution (default for this type of graph)
+
+        // --- 2. Time Range Calculation (Using requested range from RRD image, converted to UTC) ---
+        // Example range from the image: 2025-10-01 02:05 to 2025-10-02 01:05 (Adjusted for a typical 24h view)
+        $startDateString = $startDateString ?? '2025-10-01 01:05:00';
+        $endDateString   = $endDateString ?? '2025-10-02 01:05:00';
+
+        // LibreNMS typically runs on UTC, but the user's input might be local (GMT+6)
+        // We will assume the input strings are intended as GMT+6, but the timestamps used by RRDTool must be UTC.
+        $localTimezone = new DateTimeZone('Asia/Dhaka');
         $utcTimezone = new DateTimeZone('UTC');
 
         try {
-            
+            $startDateTime = new DateTime($startDateString, $localTimezone);
+            $endDateTime   = new DateTime($endDateString, $localTimezone);
+        } catch (\Exception $e) {
+            return response()->json(['status' => 'error', 'message' => 'Invalid datetime format.'], 400);
+        }
+
+        // Convert to UTC/GMT+0 for RRDtool
+        $startDateTime->setTimezone($utcTimezone);
+        $endDateTime->setTimezone($utcTimezone);
+
+        $startUnix = $startDateTime->getTimestamp();
+        $endUnix = $endDateTime->getTimestamp();
+
+
+        if ($startUnix === false || $endUnix === false || $startUnix >= $endUnix) {
+            return response()->json(['status' => 'error', 'message' => 'Invalid datetime range.'], 400);
+        }
+
+        $startTime = '-s ' . $startUnix;
+        $endTime = '-e ' . $endUnix;
+
+        // --- 3. RRDtool Command Execution (Fetch used and free memory) ---
+        $command = self::RRDTOOL_EXECUTABLE
+            . " fetch \"$rrdFilePath\" AVERAGE $resolution $startTime $endTime $dsnList";
+
+        $output = shell_exec($command);
+
+        if ($output === null || trim($output) === '') {
+            return response()->json(['status' => 'error', 'message' => "Failed to fetch memory data."], 500);
+        }
+
+        // Assuming this method converts the RRD fetch output to an array:
+        // [['timestamp_unix' => 1700000000, 'used' => 1000, 'free' => 9000], ...]
+        $parsedDataMain = $this->parseRrdFetchOutput($output);
+
+        // --- 4. Data Processing and Summary Calculation ---
+        $summary = $this->calculateMemorySummary($parsedDataMain);
+
+
+        $formattedUsed = $this->formatBytesForSiB($summary['used_bytes_cur_raw']);
+        $formattedTotal = $this->formatBytesForSiB($summary['total_bytes_raw']);
+
+        // Format the percent summary to match the structure in the image (Min, Max, Cur)
+        $percentOutput = [
+            'Min' => $summary['used_percent_summary']['min'] . '%',
+            'Max' => $summary['used_percent_summary']['max'] . '%',
+            'Cur' => $summary['used_percent_summary']['cur'] . '%',
+        ];
+
+        return response()->json([
+            'status' => 'success',
+            'metric_type' => 'Mempool Usage',
+            'device_ip' => $defaultHostIp,
+            'rrd_file_used' => $rrdFilePath,
+            'requested_range' => [
+                'start_datetime' => $startDateString,
+                'end_datetime' => $endDateString,
+            ],
+            'mempool_summary' => [
+                'main_memory' => [
+                    'percent' => $percentOutput,
+                    'current_value' => $formattedUsed,
+                ],
+                'Total' => $formattedTotal,
+                // Include raw bytes for client-side processing if needed
+                'raw_data' => [
+                    'used_bytes_cur' => $summary['used_bytes_cur_raw'],
+                    'total_bytes' => $summary['total_bytes_raw'],
+                ]
+            ],
+            'time_series_raw' => $parsedDataMain,
+        ]);
+
+    }
+
+    protected function calculateMemorySummary(array $parsedDataMain): array
+    {
+        if (empty($parsedDataMain)) {
+            return [
+                'used_percent_summary' => ['cur' => 0.0, 'min' => 0.0, 'max' => 0.0],
+                'used_bytes_cur_raw' => 0.0,
+                'total_bytes_raw' => 0.0,
+            ];
+        }
+
+        // ... (usedData and freeData filtering logic remains the same) ...
+        $usedData = array_column($parsedDataMain, 'used');
+        $freeData = array_column($parsedDataMain, 'free');
+
+        $usedData = array_filter($usedData, fn($value) => is_numeric($value) && $value !== null);
+        $freeData = array_filter($freeData, fn($value) => is_numeric($value) && $value !== null);
+
+        $percentSeries = [];
+        $totalBytes = 0;
+
+        // Calculate Total and Percentage for each data point
+        foreach ($parsedDataMain as $dataPoint) {
+            $used = $dataPoint['used'] ?? 0;
+            $free = $dataPoint['free'] ?? 0;
+
+            if (is_numeric($used) && is_numeric($free)) {
+                $total = $used + $free;
+
+                if ($total > 0) {
+                    $totalBytes = $total;
+                    $percentSeries[] = ($used / $total) * 100;
+                } else {
+                    $percentSeries[] = 0.0;
+                }
+            } else {
+                $percentSeries[] = null;
+            }
+        }
+
+        $percentSeries = array_filter($percentSeries, fn($value) => is_numeric($value));
+
+        // Filter the used data again to ensure it matches the size of the valid percent series
+        $validUsedData = [];
+        // Re-index $parsedDataMain if necessary to align with $percentSeries, but
+        // simply using the end of the filtered $usedData is often sufficient for LAST value.
+        $lastUsedBytes = !empty($usedData) ? end($usedData) : 0.0;
+
+
+        // Summary calculations (Percent)
+        $percentSummary = [
+            'cur' => !empty($percentSeries) ? round(end($percentSeries), 2) : 0.0,
+            'min' => !empty($percentSeries) ? round(min($percentSeries), 2) : 0.0,
+            'max' => !empty($percentSeries) ? round(max($percentSeries), 2) : 0.0,
+        ];
+
+        // Return raw byte counts for accurate processing/display outside this function
+        return [
+            'used_percent_summary' => $percentSummary,
+            'used_bytes_cur_raw' => (float)$lastUsedBytes,
+            'total_bytes_raw' => (float)$totalBytes,
+        ];
+    }
+
+    protected function formatBytesForSiB(float $bytes, int $precision = 2): string
+    {
+        if ($bytes <= 0) {
+            return "0.00B";
+        }
+
+        $base = 1024;
+        $units = ['B', 'KiB', 'MiB', 'GiB', 'TiB', 'PiB', 'EiB', 'ZiB', 'YiB'];
+        $i = floor(log($bytes, $base));
+
+        // Safety check to prevent array index overflow
+        $i = min(count($units) - 1, $i);
+
+        $value = $bytes / pow($base, $i);
+
+        return round($value, $precision) . $units[$i];
+    }
+
+
+
+
+    public function getSystemDiskStorageData(string $startDateString = null, string $endDateString = null): JsonResponse
+    {
+        // --- 1. Configuration & Path Setup ---
+        // RRD file path from the command:
+        $rrdFileBaseDir = '/var/www/html/backend_core_automation/storage/rrd/rrd/172.24.6.16/';
+        $rrdFileName = 'storage-hrstorage-system_disk.rrd';
+        $defaultHostIp = '172.24.6.16';
+        $rrdFilePath = $rrdFileBaseDir . $rrdFileName;
+
+        // DSNs required: used and free
+        $dsnList = 'used free';
+        $resolution = '-r 3600'; // 1-hour resolution is often used for long-term storage data (3600s/1hr step)
+
+        // --- 2. Time Range Calculation (GMT+6 to UTC conversion) ---
+        // Example range from the image: 2025-10-15 11:50 to 2025-10-16 11:50 (GMT+6)
+        $startDateString = $startDateString ?? '2025-10-15 11:50:00';
+        $endDateString   = $endDateString ?? '2025-10-16 11:50:00';
+
+        $localTimezone = new DateTimeZone('Asia/Dhaka');
+        $utcTimezone = new DateTimeZone('UTC');
+
+        try {
+            $startDateTime = new DateTime($startDateString, $localTimezone);
+            $endDateTime   = new DateTime($endDateString, $localTimezone);
+        } catch (\Exception $e) {
+            return response()->json(['status' => 'error', 'message' => 'Invalid datetime format.'], 400);
+        }
+
+        // Convert to UTC/GMT+0 for RRDtool
+        $startDateTime->setTimezone($utcTimezone);
+        $endDateTime->setTimezone($utcTimezone);
+
+        $startUnix = $startDateTime->getTimestamp();
+        $endUnix = $endDateTime->getTimestamp();
+
+
+        if ($startUnix === false || $endUnix === false || $startUnix >= $endUnix) {
+            return response()->json(['status' => 'error', 'message' => 'Invalid datetime range.'], 400);
+        }
+
+        $startTime = '-s ' . $startUnix;
+        $endTime = '-e ' . $endUnix;
+
+        // --- 3. RRDtool Command Execution (Fetch used and free storage space) ---
+        $command = self::RRDTOOL_EXECUTABLE
+            . " fetch \"$rrdFilePath\" AVERAGE $resolution $startTime $endTime $dsnList";
+
+        $output = shell_exec($command);
+
+        if ($output === null || trim($output) === '') {
+            return response()->json(['status' => 'error', 'message' => "Failed to fetch storage data."], 500);
+        }
+
+        $parsedDataMain = $this->parseRrdFetchOutput($output);
+
+        // --- 4. Data Processing and Summary Calculation ---
+        $summary = $this->calculateStorageSummary($parsedDataMain);
+
+        // Format raw bytes (Size and Used) to match the graph legend (e.g., 1.87GB, 176.99MB)
+        $formattedSize = $this->formatBytesForSiB($summary['total_size_raw'], 2);
+        $formattedUsed = $this->formatBytesForSiB($summary['used_raw'], 2);
+
+        // --- 5. Return Response ---
+        return response()->json([
+            'status' => 'success',
+            'metric_type' => 'System Disk Storage',
+            'device_ip' => $defaultHostIp,
+            'rrd_file_used' => $rrdFilePath,
+            'requested_range' => [
+                'start_datetime' => $startDateString,
+                'end_datetime' => $endDateString,
+            ],
+            'storage_summary' => [
+                'disk_name' => 'system disk',
+                'Size' => $formattedSize,
+                'Used' => $formattedUsed,
+                'Percent_Used' => round($summary['percent_used_raw'], 2) . '%',
+                'raw_data' => $summary, // Includes the raw bytes/percent values
+            ],
+            'time_series_raw' => $parsedDataMain,
+        ]);
+    }
+
+
+    protected function calculateStorageSummary(array $parsedDataMain): array
+    {
+        if (empty($parsedDataMain)) {
+            return ['total_size_raw' => 0.0, 'used_raw' => 0.0, 'percent_used_raw' => 0.0];
+        }
+
+        // Filter out NaN/NULL values to find the last valid data point
+        $validDataPoints = array_filter($parsedDataMain, function($dataPoint) {
+            return is_numeric($dataPoint['used']) && $dataPoint['used'] !== null &&
+                is_numeric($dataPoint['free']) && $dataPoint['free'] !== null;
+        });
+
+        if (empty($validDataPoints)) {
+            return ['total_size_raw' => 0.0, 'used_raw' => 0.0, 'percent_used_raw' => 0.0];
+        }
+
+        // Get the LAST valid data point
+        $lastData = end($validDataPoints);
+        $lastUsed = (float)$lastData['used'];
+        $lastFree = (float)$lastData['free'];
+
+        // Calculations:
+        $totalSize = $lastUsed + $lastFree;
+
+        if ($totalSize > 0) {
+            $percentUsed = ($lastUsed / $totalSize) * 100;
+        } else {
+            $percentUsed = 0.0;
+        }
+
+        return [
+            'total_size_raw' => $totalSize,
+            'used_raw' => $lastUsed,
+            'percent_used_raw' => $percentUsed,
+        ];
+    }
+
+
+
+    public function getIcmpPerformanceData(string $startDateString = null, string $endDateString = null): JsonResponse
+    {
+
+        $rrdFileBaseDir = '/var/www/html/backend_core_automation/storage/rrd/rrd/';
+        $rrdFileName = 'icmp-perf.rrd';
+        $defaultHostIp = '172.24.6.16';
+        $rrdFilePath = $rrdFileBaseDir . $defaultHostIp . '/' . $rrdFileName;
+
+
+        $dsnListFull = 'avg max min xmt rcv';
+        $dsnListAvg = 'avg';
+        $fullResolution = '-r 300';
+        $hourResolution = '-r 3600'; // 1-hour resolution
+
+
+
+        $startDateString = $startDateString ?? '2025-10-14 17:25:00';
+        $endDateString   = $endDateString ?? '2025-10-15 17:25:00';
+
+
+        $localTimezone = new DateTimeZone('Asia/Dhaka');
+        $utcTimezone = new DateTimeZone('UTC');
+
+        try {
+
             $startDateTime = new DateTime($startDateString, $localTimezone);
             $endDateTime   = new DateTime($endDateString, $localTimezone);
         } catch (\Exception $e) {
@@ -365,8 +675,8 @@ class RrdController extends Controller
                 'message' => 'Invalid datetime format: ' . $e->getMessage()
             ], 400);
         }
-        
-        
+
+
         $startDateTime->setTimezone($utcTimezone);
         $endDateTime->setTimezone($utcTimezone);
 
@@ -384,19 +694,19 @@ class RrdController extends Controller
         $startTime = '-s ' . $startUnix;
         $endTime = '-e ' . $endUnix;
 
-        
+
 
         //  Fetch Main Data (5-min res, all DSNs)
-        $commandMain = self::RRDTOOL_EXECUTABLE 
-                        . " fetch \"$rrdFilePath\" AVERAGE $fullResolution $startTime $endTime $dsnListFull";
+        $commandMain = self::RRDTOOL_EXECUTABLE
+            . " fetch \"$rrdFilePath\" AVERAGE $fullResolution $startTime $endTime $dsnListFull";
         $outputMain = shell_exec($commandMain);
-        
+
         if ($outputMain === null || trim($outputMain) === '') {
-            return response()->json(['status' => 'error', 'message' => "Failed to fetch main data."], 500); 
+            return response()->json(['status' => 'error', 'message' => "Failed to fetch main data."], 500);
         }
         $parsedDataMain = $this->parseRrdFetchOutput($outputMain);
 
-        // 3B. Fetch 1-Hour Aggregation Data 
+        // 3B. Fetch 1-Hour Aggregation Data
         $outputHourAvg = shell_exec(self::RRDTOOL_EXECUTABLE . " fetch \"$rrdFilePath\" AVERAGE $hourResolution $startTime $endTime $dsnListAvg");
         $outputHourMin = shell_exec(self::RRDTOOL_EXECUTABLE . " fetch \"$rrdFilePath\" MIN $hourResolution $startTime $endTime $dsnListAvg");
         $outputHourMax = shell_exec(self::RRDTOOL_EXECUTABLE . " fetch \"$rrdFilePath\" MAX $hourResolution $startTime $endTime $dsnListAvg");
@@ -406,17 +716,17 @@ class RrdController extends Controller
         $parsedDataHourMax = $this->parseRrdFetchOutput($outputHourMax);
 
 
-        
-        
+
+
         $summary = $this->calculateComprehensiveSummary(
             $parsedDataMain,
             $parsedDataHourAvg,
             $parsedDataHourMin,
             $parsedDataHourMax
         );
-        
+
         // Pass $endUnix (now UTC) to correctly cap the final outage.
-        $outageAnalysis = $this->analyzeOutageGaps($parsedDataMain, $endUnix); 
+        $outageAnalysis = $this->analyzeOutageGaps($parsedDataMain, $endUnix);
 
 
         // --- 5. Return Response ---
@@ -430,11 +740,11 @@ class RrdController extends Controller
                 'end_datetime' => $endDateString,
                 // Return the UTC Unix timestamps used for RRDtool for debugging
                 'start_unix_utc' => $startUnix,
-                'end_unix_utc' => $endUnix, 
+                'end_unix_utc' => $endUnix,
             ],
             'icmp_summary' => $summary,
-            'outage_analysis' => $outageAnalysis, 
-            'time_series_raw' => $parsedDataMain, 
+            'outage_analysis' => $outageAnalysis,
+            'time_series_raw' => $parsedDataMain,
         ]);
     }
 
@@ -443,12 +753,12 @@ class RrdController extends Controller
         array $parsedDataHourAvg,
         array $parsedDataHourMin,
         array $parsedDataHourMax
-     ): array
+    ): array
     {
         if (empty($parsedDataMain)) {
             return [];
         }
-        
+
         // --- Prepare Data (filtering out NaN for metrics) ---
         $avgRttData = array_column($parsedDataMain, 'avg');
         $minRttData = array_column($parsedDataMain, 'min');
@@ -486,7 +796,7 @@ class RrdController extends Controller
             'max' => !empty($lossSeries) ? round(max($lossSeries), 2) : 0.0,
             'avg' => !empty($lossSeries) ? round(array_sum($lossSeries) / count($lossSeries), 2) : 0.0,
         ];
-        
+
         // --- Ping Response Table (Yellow Box Data) ---
         $rttTableSummary = [
             'Now' => !empty($avgRttData) ? round(end($avgRttData), 2) : 0.0,
@@ -505,11 +815,11 @@ class RrdController extends Controller
             '1_hour_min' => $this->getAggregatedSummary($hourMinData),
             '1_hour_max' => $this->getAggregatedSummary($hourMaxData),
         ];
-        
+
         // Percentiles
         $sortedCoreRttData = $avgRttData;
-        sort($sortedCoreRttData); 
-        
+        sort($sortedCoreRttData);
+
         $percentileSummary = [
             '25th_Percentile' => round($this->calculatePercentile($sortedCoreRttData, 25), 6),
             '50th_Percentile' => round($this->calculatePercentile($sortedCoreRttData, 50), 6),
@@ -527,7 +837,7 @@ class RrdController extends Controller
         ];
     }
 
-    
+
     protected function getAggregatedSummary(array $data): array
     {
         return [
@@ -538,7 +848,7 @@ class RrdController extends Controller
         ];
     }
 
-    
+
     protected function calculatePercentile(array $data, float $percentile): float
     {
         if (empty($data)) {
@@ -546,7 +856,7 @@ class RrdController extends Controller
         }
         $count = count($data);
         $index = ($percentile / 100) * $count;
-        
+
         if (floor($index) == $index) {
             // Exact index: average the value at index and index - 1 (1-based index)
             return ($data[(int)$index - 1] + $data[(int)$index]) / 2;
@@ -556,7 +866,7 @@ class RrdController extends Controller
         }
     }
 
-    
+
     protected function formatDuration(int $startUnix, int $endUnix): string
     {
         $duration = $endUnix - $startUnix;
@@ -574,7 +884,7 @@ class RrdController extends Controller
         if ($hours > 0) $parts[] = "{$hours}h";
         if ($minutes > 0) $parts[] = "{$minutes}m";
         // Only include seconds if no larger unit is present, or if it's the only unit
-        if ($seconds > 0 || empty($parts)) $parts[] = "{$seconds}s"; 
+        if ($seconds > 0 || empty($parts)) $parts[] = "{$seconds}s";
 
         return implode(' ', $parts);
     }
@@ -584,54 +894,56 @@ class RrdController extends Controller
         $outages = [];
         $isOutage = false;
         $outageStartUnix = 0;
-        
+
+        $originalTimezone = date_default_timezone_get();
+
+        date_default_timezone_set('Asia/Dhaka');
+
         // The resolution is 300 seconds (5 minutes)
-        // $step = 300; 
 
         foreach ($parsedDataMain as $index => $dataPoint) {
             $timestamp = $dataPoint['timestamp_unix'];
-            $rttValue = $dataPoint['avg']; 
-            
-            // Check if RTT is null/NaN (missing data, the white blank gap)
+            $rttValue = $dataPoint['avg'];
+
+
             $isCurrentNull = !is_numeric($rttValue) || $rttValue === null;
 
             if ($isCurrentNull && !$isOutage) {
-                // Start of a new outage period
+
                 $isOutage = true;
                 $outageStartUnix = $timestamp;
-                
+
             } elseif (!$isCurrentNull && $isOutage) {
-                // End of an outage period (The gap ends at the timestamp of the *first good* data point.)
+
                 $outageEndUnix = $timestamp;
                 $duration = $outageEndUnix - $outageStartUnix;
 
-                // Ensure duration is positive before logging
-                if ($duration > 0) { 
+                if ($duration > 0) {
                     $outages[] = [
                         'start_time_unix' => $outageStartUnix,
                         'end_time_unix' => $outageEndUnix,
+                        // FIX: These date() calls now use the 'Asia/Dhaka' timezone
                         'start_time_formatted' => date('Y-m-d H:i:s', $outageStartUnix),
-                        'end_time_formatted' => date('Y-m-d H:i:s', $outageEndUnix), 
+                        'end_time_formatted' => date('Y-m-d H:i:s', $outageEndUnix),
                         'duration_seconds' => $duration,
                         'duration_formatted' => $this->formatDuration($outageStartUnix, $outageEndUnix),
                     ];
                 }
-                
+
                 $isOutage = false;
             }
         }
 
-        // Handle case where the outage continues until the end of the fetched range
+
         if ($isOutage) {
-            // Use the requested $endUnix as the absolute end time for the final outage
-            $outageEndUnix = $endUnix; 
+            $outageEndUnix = $endUnix;
             $duration = $outageEndUnix - $outageStartUnix;
 
-            // Only record the final outage if the duration is positive
             if ($duration > 0) {
                 $outages[] = [
                     'start_time_unix' => $outageStartUnix,
                     'end_time_unix' => $outageEndUnix,
+                    // FIX: These date() calls now use the 'Asia/Dhaka' timezone
                     'start_time_formatted' => date('Y-m-d H:i:s', $outageStartUnix),
                     'end_time_formatted' => date('Y-m-d H:i:s', $outageEndUnix),
                     'duration_seconds' => $duration,
@@ -639,6 +951,9 @@ class RrdController extends Controller
                 ];
             }
         }
+
+
+        date_default_timezone_set($originalTimezone);
 
         return [
             'total_outage_count' => count($outages),
