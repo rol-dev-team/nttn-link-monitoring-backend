@@ -8,6 +8,8 @@ use Illuminate\Http\Request;
 class PartnerInfoController extends Controller
 {
     // Get all partner infos with related models
+
+
     public function index()
     {
         $data = PartnerInfo::with(['technicalKam', 'radiusServer'])->get();
@@ -111,4 +113,3 @@ class PartnerInfoController extends Controller
         ], 200);
     }
 }
-

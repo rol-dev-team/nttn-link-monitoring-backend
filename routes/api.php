@@ -15,7 +15,7 @@ use App\Http\Controllers\PartnerInterfaceConfigController;
 use App\Http\Controllers\PartnerDropDeviceConfigController;
 use App\Http\Controllers\CapacityAlertConfigController;
 use App\Http\Controllers\IcmpAlertConfigController;
-
+use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\RrdController;
 
 // ----------------------------
@@ -301,6 +301,15 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::put('/page-elements/{pageElement}/roles', [PageElementController::class, 'updateRoles'])
         ->middleware('permission:pages.update')->name('pages.update-roles');
 
+
+    Route::prefix('dashboard')->group(function () {
+        Route::get('/partner-infos', [DashboardController::class, 'getPartnerInfos']);
+        Route::get('/aggregators', [DashboardController::class, 'getAggregators']);
+        Route::get('/max-utilization-alert', [DashboardController::class, 'getMaxUtilizationAlert']);
+        Route::get('/min-utilization-alert', [DashboardController::class, 'getMinUtilizationAlert']);
+        Route::get('/icmp-alert', [DashboardController::class, 'getICMPAlert']);
+        Route::get('/utilization/min-max/last-seven-days', [DashboardController::class, 'getMinMaxUtilizationLastSevenDays']);
+    });
 
     // ----------------------------
     // Sync Permissions

@@ -7,7 +7,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 class NasIcmpLatency extends Model
 {
-    protected $table = 'nas_icmp_latency';
+    protected $table = 'nas_icmp_latencies';
 
     protected $fillable = [
         'activation_plan_id',

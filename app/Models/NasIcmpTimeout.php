@@ -7,7 +7,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 class NasIcmpTimeout extends Model
 {
-    protected $table = 'nas_icmp_timeout';
+    protected $table = 'nas_icmp_timeouts';
 
     protected $fillable = [
         'activation_plan_id',
