@@ -57,19 +57,90 @@ class RrdController extends Controller
     }
 
 
+//    public function getPortData(string $startDateString = null, string $endDateString = null)
+//    {
+//
+//        // $startDateString = $startDateString ?? '2025-10-01 01:05:00';
+//        // $endDateString   = $endDateString ?? '2025-10-02 01:05:00';
+//        $startDateString = $startDateString ?? '2025-10-01 01:05:00';
+//        $endDateString = $endDateString ?? '2025-10-02 01:05:00';
+//        // $startDateString = '2025-10-01 01:05:00';
+//        // $endDateString   = '2025-10-02 01:05:00';
+//
+//        $rrdFilePath = '/var/www/html/backend_core_automation/storage/rrd/rrd/172.24.6.16/port-id2664.rrd';
+//
+//        // /opt/librenms/rrd/
+//
+//        $filename = basename($rrdFilePath);
+//        $port_id = (int)preg_replace('/[^0-9]/', '', $filename);
+//
+//        $path_parts = explode('/', $rrdFilePath);
+//        $host_ip = $path_parts[count($path_parts) - 2];
+//
+//        if (filter_var($host_ip, FILTER_VALIDATE_IP) === false) {
+//            $host_ip = 'Host IP not found';
+//        }
+//
+//        $resolution = '-r 300';
+//
+//
+//        $startUnix = strtotime($startDateString);
+//        $endUnix = strtotime($endDateString);
+//
+//        if ($startUnix === false || $endUnix === false || $startUnix >= $endUnix) {
+//            return response()->json([
+//                'status' => 'error',
+//                'message' => 'Invalid datetime format or range provided. Start time must be before end time.'
+//            ], 400);
+//        }
+//
+//        $startTime = '-s ' . $startUnix;
+//        $endTime = '-e ' . $endUnix;
+//
+//        $commandAvg = self::RRDTOOL_EXECUTABLE
+//            . " fetch \"$rrdFilePath\" AVERAGE $resolution $startTime $endTime";
+//
+//
+//        $commandMax = self::RRDTOOL_EXECUTABLE
+//            . " fetch \"$rrdFilePath\" MAX $resolution $startTime $endTime";
+//
+//        $dataOutputAvg = shell_exec($commandAvg);
+//        $dataOutputMax = shell_exec($commandMax);
+//
+//        if ($dataOutputAvg === null || trim($dataOutputAvg) === '') {
+//            return response()->json([
+//                'status' => 'error',
+//                'message' => 'Failed to execute rrdtool or no data returned.'
+//            ], 500);
+//        }
+//
+//        // --- Data Parsing and Summary ---
+//        $parsedDataAvg = $this->parseRrdFetchOutput($dataOutputAvg);
+//        $parsedDataMax = $this->parseRrdFetchOutput($dataOutputMax);
+//
+//        $trafficSummary = $this->getTrafficSummary($parsedDataAvg, $parsedDataMax);
+//
+//
+//        return response()->json([
+//            'status' => 'success',
+//            'host_ip' => $host_ip,
+//            'port_id' => $port_id,
+//            'data_source' => $rrdFilePath,
+//            'traffic_summary' => $trafficSummary,
+//            'results' => $parsedDataAvg,
+//            'requested_range' => [
+//                'start_unix' => $startUnix,
+//                'end_unix' => $endUnix
+//            ]
+//        ]);
+//    }
+
     public function getPortData(string $startDateString = null, string $endDateString = null)
     {
-
-        // $startDateString = $startDateString ?? '2025-10-01 01:05:00';
-        // $endDateString   = $endDateString ?? '2025-10-02 01:05:00';
         $startDateString = $startDateString ?? '2025-10-01 01:05:00';
-        $endDateString = $endDateString ?? '2025-10-02 01:05:00';
-        // $startDateString = '2025-10-01 01:05:00';
-        // $endDateString   = '2025-10-02 01:05:00';
+        $endDateString   = $endDateString ?? '2025-10-02 01:05:00';
 
         $rrdFilePath = '/var/www/html/backend_core_automation/storage/rrd/rrd/172.24.6.16/port-id2664.rrd';
-
-        // /opt/librenms/rrd/
 
         $filename = basename($rrdFilePath);
         $port_id = (int)preg_replace('/[^0-9]/', '', $filename);
@@ -82,7 +153,6 @@ class RrdController extends Controller
         }
 
         $resolution = '-r 300';
-
 
         $startUnix = strtotime($startDateString);
         $endUnix = strtotime($endDateString);
@@ -99,7 +169,6 @@ class RrdController extends Controller
 
         $commandAvg = self::RRDTOOL_EXECUTABLE
             . " fetch \"$rrdFilePath\" AVERAGE $resolution $startTime $endTime";
-
 
         $commandMax = self::RRDTOOL_EXECUTABLE
             . " fetch \"$rrdFilePath\" MAX $resolution $startTime $endTime";
@@ -120,6 +189,33 @@ class RrdController extends Controller
 
         $trafficSummary = $this->getTrafficSummary($parsedDataAvg, $parsedDataMax);
 
+        // ✅ Extract required values from summary
+        $maxDownloadMbps = $trafficSummary['max_rate']['in_mbps'] ?? 0;
+        $maxUploadMbps   = $trafficSummary['max_rate']['out_mbps'] ?? 0;
+        $maxDownloadTime = $trafficSummary['max_rate']['in_peak_time'] ?? null;
+        $maxUploadTime   = $trafficSummary['max_rate']['out_peak_time'] ?? null;
+
+        // ✅ Insert or Update into nas_interface_utilization
+        try {
+            \App\Models\NasInterfaceUtilization::updateOrCreate(
+                [
+                    'activation_plan_id' => $port_id, // if this actually maps to activation_plan_id, adjust if needed
+                    'interface_port' => $port_id
+                ],
+                [
+                    'max_download_mbps' => $maxDownloadMbps,
+                    'max_upload_mbps' => $maxUploadMbps,
+                    'max_download_collected_at' => $maxDownloadTime,
+                    'max_upload_collected_at' => $maxUploadTime,
+                ]
+            );
+        } catch (\Exception $e) {
+            return response()->json([
+                'status' => 'error',
+                'message' => 'Failed to insert data into nas_interface_utilization.',
+                'error' => $e->getMessage()
+            ], 500);
+        }
 
         return response()->json([
             'status' => 'success',
@@ -134,6 +230,7 @@ class RrdController extends Controller
             ]
         ]);
     }
+
 
     protected function getTrafficSummary(array $avgData, array $maxData)
     {
