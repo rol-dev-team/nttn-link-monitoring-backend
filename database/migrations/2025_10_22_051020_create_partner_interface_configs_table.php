@@ -15,6 +15,7 @@ return new class extends Migration
             $table->id();
             $table->unsignedBigInteger('activation_plan_id');
             $table->string('interface_name');
+            $table->string('interface_port');
             $table->timestamps();
 
             // Foreign key to partner_activation_plans

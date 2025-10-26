@@ -14,6 +14,7 @@ class PartnerInterfaceConfig extends Model
     protected $fillable = [
         'activation_plan_id',
         'interface_name',
+        'interface_port'
     ];
 
     /**
@@ -24,4 +25,3 @@ class PartnerInterfaceConfig extends Model
         return $this->belongsTo(PartnerActivationPlan::class, 'activation_plan_id');
     }
 }
-
