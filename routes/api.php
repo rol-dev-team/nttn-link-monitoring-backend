@@ -133,10 +133,14 @@ Route::middleware('auth:sanctum')->group(function () {
         ->middleware('permission:partner_interface_configs.destroy')
         ->name('partner_interface_configs.destroy');
 
+    Route::get('/partner-interface-configs', [PartnerInterfaceConfigController::class, 'index'])
+        ->middleware('permission:partner_interface_configs.index')
+        ->name('partner_interface_configs.index');
 
-    Route::get('/partner-activation-plans', [PartnerActivationPlanController::class, 'index'])
-        ->middleware('permission:partner_activation_plans.index')
-        ->name('partner_activation_plans.index');
+
+    Route::get('/partner-activation-plans', [PartnerInterfaceConfigController::class, 'fetchNasIpLocal'])
+        ->middleware('permission:partner_activation_plans.fetchNasIpLocal')
+        ->name('partner_activation_plans.fetchNasIpLocal');
 
     Route::get('/partner-activation-plans/{id}', [PartnerActivationPlanController::class, 'show'])
         ->middleware('permission:partner_activation_plans.show')
