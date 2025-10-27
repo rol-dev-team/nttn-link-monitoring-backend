@@ -25,12 +25,12 @@ jobs:
         run: composer install --optimize-autoloader
 
       - name: Sync Project Files via SCP
-        uses: appleboy/scp-action@v0.1.8
+        uses: appleboy/scp-action@v0.1.7
         with:
           host: ${{ secrets.SERVER_HOST }}
           username: ${{ secrets.SERVER_USER }}
           key: ${{ secrets.SSH_PRIVATE_KEY }}
-          source: "." # Copy everything from the current directory (repo root)
+          source: "."
           target: "/var/www/html/nttn-monitoring-application/test-backend"
           exclude: ".env" 
 
