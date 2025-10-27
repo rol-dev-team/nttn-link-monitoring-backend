@@ -21,9 +21,20 @@ jobs:
           extensions: bcmath, curl, gd, intl, mbstring, pdo_mysql, pdo_pgsql, zip, opcache
 
       - name: Install Composer Dependencies
-        run: composer install --no-dev --optimize-autoloader --no-scripts
+        # Runs Composer install to build vendor directory on the runner
+        run: composer install --optimize-autoloader
 
-      - name: Sync Project, Set Permissions, and Cache
+      - name: Sync Project Files via SCP
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host: ${{ secrets.SERVER_HOST }}
+          username: ${{ secrets.SERVER_USER }}
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          source: "."
+          target: "/var/www/html/nttn-monitoring-application/test-backend"
+          exclude: ".env" 
+
+      - name: Set Permissions and Cache
         uses: appleboy/ssh-action@v1.0.3
         with:
           host: ${{ secrets.SERVER_HOST }}
@@ -31,14 +42,15 @@ jobs:
           key: ${{ secrets.SSH_PRIVATE_KEY }}
           script: |
             DEPLOY_DIR="/var/www/html/nttn-monitoring-application/test-backend"
-            echo "Deploying Laravel app to $DEPLOY_DIR"
+            echo "Running Laravel commands in $DEPLOY_DIR"
 
-            rsync -a --delete --exclude '.env' ./ $DEPLOY_DIR/
-
+            mkdir -p $DEPLOY_DIR 
             sudo chown -R www-data:www-data $DEPLOY_DIR
-            sudo chmod -R 775 $DEPLOY_DIR/storage $DEPLOY_DIR/bootstrap/cache
-
+            
             cd $DEPLOY_DIR
+            
+            sudo chmod -R 775 storage bootstrap/cache
+            
             sudo -u www-data php artisan optimize:clear
             sudo -u www-data php artisan config:cache
             sudo -u www-data php artisan route:cache

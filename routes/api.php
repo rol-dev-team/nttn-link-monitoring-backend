@@ -133,6 +133,12 @@ Route::middleware('auth:sanctum')->group(function () {
         ->middleware('permission:partner_interface_configs.destroy')
         ->name('partner_interface_configs.destroy');
 
+    Route::get('/nas-ips', [PartnerInterfaceConfigController::class, 'fetchNasIpLocal'])
+        ->middleware('permission:partner_interface_configs.fetchNasIpLocal')
+        ->name('partner_interface_configs.fetchNasIpLocal');
+
+
+
 
     Route::get('/partner-activation-plans', [PartnerActivationPlanController::class, 'index'])
         ->middleware('permission:partner_activation_plans.index')
