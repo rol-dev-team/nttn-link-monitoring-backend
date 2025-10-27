@@ -6,6 +6,7 @@ use App\Models\PartnerInterfaceConfig;
 use App\Models\PartnerActivationPlan;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Http\JsonResponse;
 
 class PartnerInterfaceConfigController extends Controller
 {
@@ -65,7 +66,7 @@ class PartnerInterfaceConfigController extends Controller
         $validated = $request->validate([
             'activation_plan_id' => 'required|exists:partner_activation_plans,id',
             'interface_name' => 'required|string|max:255',
-            'interface_port' => 'required|string|max:255',
+//            'interface_port' => 'required|string|max:255',
         ]);
 
         try {

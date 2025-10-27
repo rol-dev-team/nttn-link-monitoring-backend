@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Log;
 use Symfony\Component\Process\Process;
 use Illuminate\Http\JsonResponse;
 use phpseclib3\Net\SSH2;
@@ -57,91 +58,32 @@ class RrdController extends Controller
     }
 
 
-    public function getPortData(string $startDateString = null, string $endDateString = null)
-    {
-
-        // $startDateString = $startDateString ?? '2025-10-01 01:05:00';
-        // $endDateString   = $endDateString ?? '2025-10-02 01:05:00';
-        $startDateString = $startDateString ?? '2025-10-01 01:05:00';
-        $endDateString = $endDateString ?? '2025-10-02 01:05:00';
-        // $startDateString = '2025-10-01 01:05:00';
-        // $endDateString   = '2025-10-02 01:05:00';
-
-        $rrdFilePath = '/var/www/html/backend_core_automation/storage/rrd/rrd/172.24.6.16/port-id2664.rrd';
-
-        // /opt/librenms/rrd/
-
-        $filename = basename($rrdFilePath);
-        $port_id = (int)preg_replace('/[^0-9]/', '', $filename);
-
-        $path_parts = explode('/', $rrdFilePath);
-        $host_ip = $path_parts[count($path_parts) - 2];
-
-        if (filter_var($host_ip, FILTER_VALIDATE_IP) === false) {
-            $host_ip = 'Host IP not found';
-        }
-
-        $resolution = '-r 300';
-
-
-        $startUnix = strtotime($startDateString);
-        $endUnix = strtotime($endDateString);
-
-        if ($startUnix === false || $endUnix === false || $startUnix >= $endUnix) {
-            return response()->json([
-                'status' => 'error',
-                'message' => 'Invalid datetime format or range provided. Start time must be before end time.'
-            ], 400);
-        }
-
-        $startTime = '-s ' . $startUnix;
-        $endTime = '-e ' . $endUnix;
-
-        $commandAvg = self::RRDTOOL_EXECUTABLE
-            . " fetch \"$rrdFilePath\" AVERAGE $resolution $startTime $endTime";
-
-
-        $commandMax = self::RRDTOOL_EXECUTABLE
-            . " fetch \"$rrdFilePath\" MAX $resolution $startTime $endTime";
-
-        $dataOutputAvg = shell_exec($commandAvg);
-        $dataOutputMax = shell_exec($commandMax);
-
-        if ($dataOutputAvg === null || trim($dataOutputAvg) === '') {
-            return response()->json([
-                'status' => 'error',
-                'message' => 'Failed to execute rrdtool or no data returned.'
-            ], 500);
-        }
-
-        // --- Data Parsing and Summary ---
-        $parsedDataAvg = $this->parseRrdFetchOutput($dataOutputAvg);
-        $parsedDataMax = $this->parseRrdFetchOutput($dataOutputMax);
-
-        $trafficSummary = $this->getTrafficSummary($parsedDataAvg, $parsedDataMax);
-
-
-        return response()->json([
-            'status' => 'success',
-            'host_ip' => $host_ip,
-            'port_id' => $port_id,
-            'data_source' => $rrdFilePath,
-            'traffic_summary' => $trafficSummary,
-            'results' => $parsedDataAvg,
-            'requested_range' => [
-                'start_unix' => $startUnix,
-                'end_unix' => $endUnix
-            ]
-        ]);
-    }
-
-//    public function getPortData(string $startDateString = null, string $endDateString = null): JsonResponse
+//    public function getPortData(string $startDateString = null, string $endDateString = null)
 //    {
+//
+//        // $startDateString = $startDateString ?? '2025-10-01 01:05:00';
+//        // $endDateString   = $endDateString ?? '2025-10-02 01:05:00';
 //        $startDateString = $startDateString ?? '2025-10-01 01:05:00';
 //        $endDateString = $endDateString ?? '2025-10-02 01:05:00';
+//        // $startDateString = '2025-10-01 01:05:00';
+//        // $endDateString   = '2025-10-02 01:05:00';
 //
-//        $rrdFileBaseDir = '/var/www/html/backend_core_automation/storage/rrd/rrd/';
+//        $rrdFilePath = '/var/www/html/backend_core_automation/storage/rrd/rrd/172.24.6.16/port-id2664.rrd';
+//
+//        // /opt/librenms/rrd/
+//
+//        $filename = basename($rrdFilePath);
+//        $port_id = (int)preg_replace('/[^0-9]/', '', $filename);
+//
+//        $path_parts = explode('/', $rrdFilePath);
+//        $host_ip = $path_parts[count($path_parts) - 2];
+//
+//        if (filter_var($host_ip, FILTER_VALIDATE_IP) === false) {
+//            $host_ip = 'Host IP not found';
+//        }
+//
 //        $resolution = '-r 300';
+//
 //
 //        $startUnix = strtotime($startDateString);
 //        $endUnix = strtotime($endDateString);
@@ -149,112 +91,207 @@ class RrdController extends Controller
 //        if ($startUnix === false || $endUnix === false || $startUnix >= $endUnix) {
 //            return response()->json([
 //                'status' => 'error',
-//                'message' => 'Invalid datetime format or range provided.'
+//                'message' => 'Invalid datetime format or range provided. Start time must be before end time.'
 //            ], 400);
 //        }
 //
 //        $startTime = '-s ' . $startUnix;
 //        $endTime = '-e ' . $endUnix;
 //
-//        // Fetch NAS IPs dynamically from DB
-//        $nasIps = DB::connection('remote_pgsql')
-//            ->table('partner_activation_plans')
-//            ->pluck('nas_ip', 'id')
-//            ->filter()
-//            ->unique();
+//        $commandAvg = self::RRDTOOL_EXECUTABLE
+//            . " fetch \"$rrdFilePath\" AVERAGE $resolution $startTime $endTime";
 //
-//        if ($nasIps->isEmpty()) {
+//
+//        $commandMax = self::RRDTOOL_EXECUTABLE
+//            . " fetch \"$rrdFilePath\" MAX $resolution $startTime $endTime";
+//
+//        $dataOutputAvg = shell_exec($commandAvg);
+//        $dataOutputMax = shell_exec($commandMax);
+//
+//        if ($dataOutputAvg === null || trim($dataOutputAvg) === '') {
 //            return response()->json([
 //                'status' => 'error',
-//                'message' => 'No NAS IPs found in the database.'
-//            ], 404);
+//                'message' => 'Failed to execute rrdtool or no data returned.'
+//            ], 500);
 //        }
 //
-//        $hostsData = [];
+//        // --- Data Parsing and Summary ---
+//        $parsedDataAvg = $this->parseRrdFetchOutput($dataOutputAvg);
+//        $parsedDataMax = $this->parseRrdFetchOutput($dataOutputMax);
 //
-//        foreach ($nasIps as $activationPlanId => $host_ip) {
-//            $portRrdDirectory = $rrdFileBaseDir . $host_ip;
+//        $trafficSummary = $this->getTrafficSummary($parsedDataAvg, $parsedDataMax);
 //
-//            if (!is_dir($portRrdDirectory)) {
-//                $hostsData[$host_ip] = [
-//                    'status' => 'error',
-//                    'message' => "RRD directory for host $host_ip not found."
-//                ];
-//                continue;
-//            }
-//
-//            // Find all port RRD files
-//            $portFiles = glob($portRrdDirectory . '/port-id*.rrd');
-//            if (empty($portFiles)) {
-//                $hostsData[$host_ip] = [
-//                    'status' => 'error',
-//                    'message' => "No port RRD files found for host $host_ip."
-//                ];
-//                continue;
-//            }
-//
-//            $portsData = [];
-//
-//            foreach ($portFiles as $rrdFilePath) {
-//                $filename = basename($rrdFilePath);
-//                $port_id = (int)preg_replace('/[^0-9]/', '', $filename);
-//
-//                $commandAvg = self::RRDTOOL_EXECUTABLE . " fetch \"$rrdFilePath\" AVERAGE $resolution $startTime $endTime";
-//                $commandMax = self::RRDTOOL_EXECUTABLE . " fetch \"$rrdFilePath\" MAX $resolution $startTime $endTime";
-//
-//                $dataOutputAvg = shell_exec($commandAvg);
-//                $dataOutputMax = shell_exec($commandMax);
-//
-//                if (empty($dataOutputAvg) || empty($dataOutputMax)) {
-//                    continue;
-//                }
-//
-//                $parsedDataAvg = $this->parseRrdFetchOutput($dataOutputAvg);
-//                $parsedDataMax = $this->parseRrdFetchOutput($dataOutputMax);
-//
-//                $trafficSummary = $this->getTrafficSummary($parsedDataAvg, $parsedDataMax);
-//
-//                if (!empty($trafficSummary['max_rate'])) {
-//                    $maxDownloadMbps = $trafficSummary['max_rate']['in_mbps'] ?? 0;
-//                    $maxUploadMbps = $trafficSummary['max_rate']['out_mbps'] ?? 0;
-//                    $maxDownloadTime = $trafficSummary['max_rate']['in_peak_time'] ?? null;
-//                    $maxUploadTime = $trafficSummary['max_rate']['out_peak_time'] ?? null;
-//
-//                    // Always INSERT (no update)
-//                    try {
-//                        \App\Models\NasInterfaceUtilization::on('remote_pgsql')->create([
-//                            'activation_plan_id' => $activationPlanId,
-//                            'interface_port' => $port_id,
-//                            'max_download_mbps' => $maxDownloadMbps,
-//                            'max_upload_mbps' => $maxUploadMbps,
-//                            'max_download_collected_at' => $maxDownloadTime,
-//                            'max_upload_collected_at' => $maxUploadTime,
-//                        ]);
-//                    } catch (\Exception $e) {
-//                        $hostsData[$host_ip]['errors'][] = "Failed to insert for port $port_id: " . $e->getMessage();
-//                        continue;
-//                    }
-//
-//                    $portsData[] = [
-//                        'port_id' => $port_id,
-//                        'traffic_summary' => $trafficSummary,
-//                    ];
-//                }
-//            }
-//
-//            $hostsData[$host_ip] = [
-//                'status' => 'success',
-//                'activation_plan_id' => $activationPlanId,
-//                'port_count' => count($portsData),
-//                'ports' => $portsData
-//            ];
-//        }
 //
 //        return response()->json([
 //            'status' => 'success',
-//            'hosts' => $hostsData,
+//            'host_ip' => $host_ip,
+//            'port_id' => $port_id,
+//            'data_source' => $rrdFilePath,
+//            'traffic_summary' => $trafficSummary,
+//            'results' => $parsedDataAvg,
+//            'requested_range' => [
+//                'start_unix' => $startUnix,
+//                'end_unix' => $endUnix
+//            ]
 //        ]);
 //    }
+
+
+//    public function getPortData(string $startDateString = null, string $endDateString = null): JsonResponse { $startDateString = $startDateString ?? '2025-10-01 01:05:00'; $endDateString = $endDateString ?? '2025-10-02 01:05:00'; $rrdFileBaseDir = '/var/www/html/backend_core_automation/storage/rrd/rrd/'; $resolution = '-r 300'; $startUnix = strtotime($startDateString); $endUnix = strtotime($endDateString); if ($startUnix === false || $endUnix === false || $startUnix >= $endUnix) { return response()->json([ 'status' => 'error', 'message' => 'Invalid datetime format or range provided.' ], 400); } $startTime = '-s ' . $startUnix; $endTime = '-e ' . $endUnix;  $nasIps = DB::connection('pgsql') ->table('partner_activation_plans') ->pluck('nas_ip', 'id') ->filter() ->unique(); if ($nasIps->isEmpty()) { return response()->json([ 'status' => 'error', 'message' => 'No NAS IPs found in the database.' ], 404); } $hostsData = []; foreach ($nasIps as $activationPlanId => $host_ip) { $portRrdDirectory = $rrdFileBaseDir . $host_ip; if (!is_dir($portRrdDirectory)) { $hostsData[$host_ip] = [ 'status' => 'error', 'message' => "RRD directory for host $host_ip not found." ]; continue; }  $portFiles = glob($portRrdDirectory . '/port-id*.rrd'); if (empty($portFiles)) { $hostsData[$host_ip] = [ 'status' => 'error', 'message' => "No port RRD files found for host $host_ip." ]; continue; } $portsData = []; foreach ($portFiles as $rrdFilePath) { $filename = basename($rrdFilePath); $port_id = (int)preg_replace('/[^0-9]/', '', $filename); $commandAvg = self::RRDTOOL_EXECUTABLE . " fetch \"$rrdFilePath\" AVERAGE $resolution $startTime $endTime"; $commandMax = self::RRDTOOL_EXECUTABLE . " fetch \"$rrdFilePath\" MAX $resolution $startTime $endTime"; $dataOutputAvg = shell_exec($commandAvg); $dataOutputMax = shell_exec($commandMax); if (empty($dataOutputAvg) || empty($dataOutputMax)) { continue; } $parsedDataAvg = $this->parseRrdFetchOutput($dataOutputAvg); $parsedDataMax = $this->parseRrdFetchOutput($dataOutputMax); $trafficSummary = $this->getTrafficSummary($parsedDataAvg, $parsedDataMax); if (!empty($trafficSummary['max_rate'])) { $maxDownloadMbps = $trafficSummary['max_rate']['in_mbps'] ?? 0; $maxUploadMbps = $trafficSummary['max_rate']['out_mbps'] ?? 0; $maxDownloadTime = $trafficSummary['max_rate']['in_peak_time'] ?? null; $maxUploadTime = $trafficSummary['max_rate']['out_peak_time'] ?? null;  try { \App\Models\NasInterfaceUtilization::on('pgsql')->create([ 'activation_plan_id' => $activationPlanId, 'interface_port' => $port_id, 'max_download_mbps' => $maxDownloadMbps, 'max_upload_mbps' => $maxUploadMbps, 'max_download_collected_at' => $maxDownloadTime, 'max_upload_collected_at' => $maxUploadTime, ]); } catch (\Exception $e) { $hostsData[$host_ip]['errors'][] = "Failed to insert for port $port_id: " . $e->getMessage(); continue; } $portsData[] = [ 'port_id' => $port_id, 'traffic_summary' => $trafficSummary, ]; } } $hostsData[$host_ip] = [ 'status' => 'success', 'activation_plan_id' => $activationPlanId, 'port_count' => count($portsData), 'ports' => $portsData ]; } return response()->json([ 'status' => 'success', 'hosts' => $hostsData, ]); }
+    public function getPortData(string $startDateString = null, string $endDateString = null): JsonResponse
+    {
+        $rrdFileBaseDir = '/var/www/html/nttn-monitoring-application/partner-backend/storage/rrd/rrd/';
+        $resolution = '-r 300';
+
+        // Fetch NAS IPs
+        $nasIps = DB::connection('pgsql')
+            ->table('partner_activation_plans')
+            ->pluck('nas_ip', 'id')
+            ->filter()
+            ->unique();
+
+//        $nasIps = ['172.24.6.16'];
+
+        if ($nasIps->isEmpty()) {
+            return response()->json([
+                'status' => 'error',
+                'message' => 'No NAS IPs found in the database.'
+            ], 404);
+        }
+
+        $hostsData = [];
+
+        foreach ($nasIps as $activationPlanId => $host_ip) {
+            // 🧹 Clean and verify host_ip
+            $host_ip = trim($host_ip);
+            if (empty($host_ip)) {
+                $hostsData[$activationPlanId] = [
+                    'status' => 'error',
+                    'message' => 'Empty NAS IP found for activation plan ID ' . $activationPlanId
+                ];
+                continue;
+            }
+
+            // --- Determine Start/End Datetime Based on Last Record ---
+            $latestCreatedAt = DB::connection('pgsql')
+                ->table('nas_interface_utilizations as c')
+                ->join('partner_activation_plans as p', 'c.activation_plan_id', '=', 'p.id')
+                ->where('p.nas_ip', $host_ip)
+                ->max('c.created_at');
+
+            if ($latestCreatedAt) {
+                // Start from 1 second after last collected time
+                $startDateString = date('Y-m-d H:i:s', strtotime($latestCreatedAt) + 1);
+                $endDateString = now()->format('Y-m-d H:i:s');
+            } else {
+                // If no previous data, fetch last 30 minutes
+                $endDateString = now()->format('Y-m-d H:i:s');
+                $startDateString = now()->subMinutes(30)->format('Y-m-d H:i:s');
+            }
+
+            if (strtotime($startDateString) >= strtotime($endDateString)) {
+                $hostsData[$host_ip] = [
+                    'status' => 'info',
+                    'message' => "No new port data to process for host $host_ip. Last collected at: $latestCreatedAt",
+                    'last_collected_at' => $latestCreatedAt,
+                ];
+                continue;
+            }
+
+            $startUnix = strtotime($startDateString);
+            $endUnix = strtotime($endDateString);
+            $startTime = '-s ' . $startUnix;
+            $endTime = '-e ' . $endUnix;
+
+            // --- Process RRD files ---
+            $portRrdDirectory = rtrim($rrdFileBaseDir, '/') . '/' . $host_ip;
+
+            if (!is_dir($portRrdDirectory)) {
+                Log::warning("RRD directory not found: '$portRrdDirectory'");
+                $hostsData[$host_ip] = [
+                    'status' => 'error',
+                    'message' => "RRD directory for host $host_ip not found. Checked: '$portRrdDirectory'"
+                ];
+                continue;
+            }
+
+            $portFiles = glob($portRrdDirectory . '/port-id*.rrd');
+            if (empty($portFiles)) {
+                $hostsData[$host_ip] = [
+                    'status' => 'error',
+                    'message' => "No port RRD files found for host $host_ip."
+                ];
+                continue;
+            }
+
+            $portsData = [];
+
+            foreach ($portFiles as $rrdFilePath) {
+                $filename = basename($rrdFilePath);
+                $port_id = (int)preg_replace('/[^0-9]/', '', $filename);
+
+                $commandAvg = self::RRDTOOL_EXECUTABLE . " fetch \"$rrdFilePath\" AVERAGE $resolution $startTime $endTime";
+                $commandMax = self::RRDTOOL_EXECUTABLE . " fetch \"$rrdFilePath\" MAX $resolution $startTime $endTime";
+
+                $dataOutputAvg = shell_exec($commandAvg);
+                $dataOutputMax = shell_exec($commandMax);
+
+                if (empty($dataOutputAvg) || empty($dataOutputMax)) {
+                    Log::warning("Empty RRD fetch output for file: $rrdFilePath");
+                    continue;
+                }
+
+                $parsedDataAvg = $this->parseRrdFetchOutput($dataOutputAvg);
+                $parsedDataMax = $this->parseRrdFetchOutput($dataOutputMax);
+                $trafficSummary = $this->getTrafficSummary($parsedDataAvg, $parsedDataMax);
+
+                if (!empty($trafficSummary['max_rate'])) {
+                    $maxDownloadMbps = $trafficSummary['max_rate']['in_mbps'] ?? 0;
+                    $maxUploadMbps = $trafficSummary['max_rate']['out_mbps'] ?? 0;
+                    $maxDownloadTime = $trafficSummary['max_rate']['in_peak_time'] ?? null;
+                    $maxUploadTime = $trafficSummary['max_rate']['out_peak_time'] ?? null;
+
+                    try {
+                        \App\Models\NasInterfaceUtilization::on('pgsql')->create([
+                            'activation_plan_id' => $activationPlanId,
+                            'interface_port' => $port_id,
+                            'max_download_mbps' => $maxDownloadMbps,
+                            'max_upload_mbps' => $maxUploadMbps,
+                            'max_download_collected_at' => $maxDownloadTime,
+                            'max_upload_collected_at' => $maxUploadTime,
+                        ]);
+                    } catch (\Exception $e) {
+                        Log::error("Failed to insert utilization for port $port_id ($host_ip): " . $e->getMessage());
+                        $hostsData[$host_ip]['errors'][] = "Failed to insert for port $port_id: " . $e->getMessage();
+                        continue;
+                    }
+
+                    $portsData[] = [
+                        'port_id' => $port_id,
+                        'traffic_summary' => $trafficSummary,
+                    ];
+                }
+            }
+
+            $hostsData[$host_ip] = [
+                'status' => 'success',
+                'activation_plan_id' => $activationPlanId,
+                'requested_range' => [
+                    'start_datetime' => $startDateString,
+                    'end_datetime' => $endDateString,
+                ],
+                'port_count' => count($portsData),
+                'ports' => $portsData
+            ];
+        }
+
+        return response()->json([
+            'status' => 'success',
+            'hosts' => $hostsData,
+        ]);
+    }
+
+
 
 
 
@@ -496,7 +533,7 @@ class RrdController extends Controller
 //        $resolution = '-r 300';
 //
 //        // Fetch NAS IPs dynamically from remote PostgreSQL
-//        $nasIps = DB::connection('remote_pgsql')
+//        $nasIps = DB::connection('pgsql')
 //            ->table('partner_activation_plans')
 //            ->pluck('nas_ip', 'id')
 //            ->filter()
@@ -596,7 +633,7 @@ class RrdController extends Controller
 //            // Insert or update in nas_cpu_usages table on remote PostgreSQL
 //            if ($maxLoadPeak > 0 && $maxLoadTime) {
 //
-//                NasCpuUsage::on('remote_pgsql')->create([
+//                NasCpuUsage::on('pgsql')->create([
 //                    'activation_plan_id' => $activationPlanId,
 //                    'collected_at' => $maxLoadTime,
 //                    'max_cpu_load' => $maxLoadPeak,
@@ -759,7 +796,7 @@ class RrdController extends Controller
 
             // Insert into nas_cpu_usages if new peak exists
             if ($maxLoadPeak > 0 && $maxLoadTime) {
-                NasCpuUsage::on('remote_pgsql')->create([
+                NasCpuUsage::on('pgsql')->create([
                     'activation_plan_id' => $activationPlanId,
                     'collected_at' => $maxLoadTime,
                     'max_cpu_load' => $maxLoadPeak,
@@ -803,7 +840,7 @@ class RrdController extends Controller
 //     }
 
 //     // Get all nas_ip from remote PostgreSQL database
-//     $nasIps = DB::connection('remote_pgsql')
+//     $nasIps = DB::connection('pgsql')
 //                 ->table('partner_activation_plans')
 //                 ->select('nas_ip')
 //                 ->get()
@@ -1123,7 +1160,7 @@ class RrdController extends Controller
         $endTime = '-e ' . $endUnix;
 
         // --- 2. Fetch NAS IPs dynamically from remote PostgreSQL ---
-        $nasIps = DB::connection('remote_pgsql')
+        $nasIps = DB::connection('pgsql')
             ->table('partner_activation_plans')
             ->pluck('nas_ip', 'id') // key = activation_plan_id
             ->filter()
@@ -1171,7 +1208,7 @@ class RrdController extends Controller
 
             // --- 5. Insert into remote DB ---
             if ($maxMemoryPercent > 0 && $maxMemoryTimestamp) {
-                NasRamUsage::on('remote_pgsql')->create([
+                NasRamUsage::on('pgsql')->create([
                     'activation_plan_id' => $activationPlanId,
                     'max_memory_load' => $maxMemoryPercent,
                     'collected_at' => date('Y-m-d H:i:s', $maxMemoryTimestamp),
@@ -1247,7 +1284,7 @@ class RrdController extends Controller
 //        $resolution = '-r 300'; // 5 min interval
 //
 //        // --- 2. Fetch NAS IPs ---
-//        $nasIps = DB::connection('remote_pgsql')
+//        $nasIps = DB::connection('pgsql')
 //            ->table('partner_activation_plans')
 //            ->pluck('nas_ip', 'id') // key = activation_plan_id
 //            ->filter()
@@ -1300,9 +1337,9 @@ class RrdController extends Controller
 //            $maxMemoryPercent = $summary['used_percent_summary']['max'];
 //            $maxTimestamp     = $summary['max_percent_timestamp'];
 //
-//            // Insert into nas_ram_usages on remote_pgsql
+//            // Insert into nas_ram_usages on pgsql
 //            if ($maxMemoryPercent && $maxTimestamp) {
-//                NasRamUsage::on('remote_pgsql')->create([
+//                NasRamUsage::on('pgsql')->create([
 //                    'activation_plan_id' => $activationPlanId,
 //                    'max_memory_load'    => $maxMemoryPercent,
 //                    'collected_at'       => date('Y-m-d H:i:s', $maxTimestamp),
@@ -1353,7 +1390,7 @@ class RrdController extends Controller
         $resolution    = '-r 300'; // 5 min interval
 
         // --- 1. Fetch NAS IPs ---
-        $nasIps = DB::connection('remote_pgsql')
+        $nasIps = DB::connection('pgsql')
             ->table('partner_activation_plans')
             ->pluck('nas_ip', 'id') // key = activation_plan_id
             ->filter()
@@ -1368,7 +1405,7 @@ class RrdController extends Controller
 
         foreach ($nasIps as $activationPlanId => $host_ip) {
             // --- 2. Get latest RAM usage collected_at ---
-            $latestCreatedAt = DB::connection('remote_pgsql')
+            $latestCreatedAt = DB::connection('pgsql')
                 ->table('nas_ram_usages as c')
                 ->join('partner_activation_plans as p', 'c.activation_plan_id', '=', 'p.id')
                 ->where('p.nas_ip', $host_ip)
@@ -1452,7 +1489,7 @@ class RrdController extends Controller
             $maxTimestamp     = $summary['max_percent_timestamp'];
 
             if ($maxMemoryPercent && $maxTimestamp) {
-                NasRamUsage::on('remote_pgsql')->create([
+                NasRamUsage::on('pgsql')->create([
                     'activation_plan_id' => $activationPlanId,
                     'max_memory_load'    => $maxMemoryPercent,
                     'collected_at'       => date('Y-m-d H:i:s', $maxTimestamp),
@@ -1715,7 +1752,7 @@ class RrdController extends Controller
 //        $resolution = '-r 3600'; // 1-hour interval
 //
 //        // --- 2. Fetch NAS IPs ---
-//        $nasIps = DB::connection('remote_pgsql')
+//        $nasIps = DB::connection('pgsql')
 //            ->table('partner_activation_plans')
 //            ->pluck('nas_ip', 'id') // key = activation_plan_id
 //            ->filter()
@@ -1771,7 +1808,7 @@ class RrdController extends Controller
 //
 //            // Insert into nas_disk_usages table
 //            if ($diskUsedBytes && $maxTimestamp) {
-//                NasDiskUsage::on('remote_pgsql')->create([
+//                NasDiskUsage::on('pgsql')->create([
 //                    'activation_plan_id' => $activationPlanId,
 //                    'disk_size'          => $diskSizeBytes,
 //                    'disk_used'          => $diskUsedBytes,
@@ -1824,7 +1861,7 @@ class RrdController extends Controller
         $resolution    = '-r 3600'; // 1-hour interval
 
         // --- 1. Fetch NAS IPs ---
-        $nasIps = DB::connection('remote_pgsql')
+        $nasIps = DB::connection('pgsql')
             ->table('partner_activation_plans')
             ->pluck('nas_ip', 'id') // key = activation_plan_id
             ->filter()
@@ -1839,7 +1876,7 @@ class RrdController extends Controller
 
         foreach ($nasIps as $activationPlanId => $host_ip) {
             // --- 2. Get latest disk usage collected_at ---
-            $latestCreatedAt = DB::connection('remote_pgsql')
+            $latestCreatedAt = DB::connection('pgsql')
                 ->table('nas_disk_usages as c')
                 ->join('partner_activation_plans as p', 'c.activation_plan_id', '=', 'p.id')
                 ->where('p.nas_ip', $host_ip)
@@ -1925,7 +1962,7 @@ class RrdController extends Controller
 
             // Insert into nas_disk_usages table
             if ($diskUsedBytes && $maxTimestamp) {
-                NasDiskUsage::on('remote_pgsql')->create([
+                NasDiskUsage::on('pgsql')->create([
                     'activation_plan_id' => $activationPlanId,
                     'disk_size'          => $diskSizeBytes,
                     'disk_used'          => $diskUsedBytes,
@@ -2157,7 +2194,7 @@ class RrdController extends Controller
 //    public function getIcmpPerformanceData(string $startDateString = null, string $endDateString = null): JsonResponse
 //    {
 //        // --- 1. Load NAS IPs mapped to activation_plan_id ---
-//        $nasIps = DB::connection('remote_pgsql')
+//        $nasIps = DB::connection('pgsql')
 //            ->table('partner_activation_plans')
 //            ->pluck('nas_ip', 'id') // key = activation_plan_id
 //            ->filter()
@@ -2220,7 +2257,7 @@ class RrdController extends Controller
 //            // --- Insert max RTT into NasIcmpLatency ---
 //            $maxRtt = $summary['rtt_loss_high_res']['rtt_ms'] ?? [];
 //            if (!empty($maxRtt['max']) && !empty($maxRtt['max_timestamp'])) {
-//                NasIcmpLatency::on('remote_pgsql')->updateOrCreate(
+//                NasIcmpLatency::on('pgsql')->updateOrCreate(
 //                    [
 //                        'activation_plan_id' => $activationPlanId,
 //                        'collected_at' => $maxRtt['max_timestamp'],
@@ -2234,7 +2271,7 @@ class RrdController extends Controller
 //            // --- Insert outage periods into NasIcmpTimeout ---
 //            if (!empty($outageAnalysis['outage_periods'])) {
 //                foreach ($outageAnalysis['outage_periods'] as $outage) {
-//                    NasIcmpTimeout::on('remote_pgsql')->updateOrCreate(
+//                    NasIcmpTimeout::on('pgsql')->updateOrCreate(
 //                        [
 //                            'activation_plan_id' => $activationPlanId,
 //                            'timeout_start' => $outage['start_time_formatted'],
@@ -2270,7 +2307,7 @@ class RrdController extends Controller
     public function getIcmpPerformanceData(): JsonResponse
     {
         // --- 1. Load NAS IPs ---
-        $nasIps = DB::connection('remote_pgsql')
+        $nasIps = DB::connection('pgsql')
             ->table('partner_activation_plans')
             ->pluck('nas_ip', 'id') // key = activation_plan_id
             ->filter()
@@ -2292,14 +2329,14 @@ class RrdController extends Controller
         foreach ($nasIps as $activationPlanId => $nasIp) {
 
             // --- 2. Get latest NasIcmpLatency record ---
-            $latestLatency = DB::connection('remote_pgsql')
+            $latestLatency = DB::connection('pgsql')
                 ->table('nas_icmp_latencies as c')
                 ->join('partner_activation_plans as p', 'c.activation_plan_id', '=', 'p.id')
                 ->where('p.nas_ip', $nasIp)
                 ->max('c.created_at');
 
             // --- 3. Get latest NasIcmpTimeout record ---
-            $latestTimeout = DB::connection('remote_pgsql')
+            $latestTimeout = DB::connection('pgsql')
                 ->table('nas_icmp_timeouts as c')
                 ->join('partner_activation_plans as p', 'c.activation_plan_id', '=', 'p.id')
                 ->where('p.nas_ip', $nasIp)
@@ -2364,7 +2401,7 @@ class RrdController extends Controller
             // --- 7. Insert/update NasIcmpLatency ---
             $maxRtt = $summary['rtt_loss_high_res']['rtt_ms'] ?? [];
             if (!empty($maxRtt['max']) && !empty($maxRtt['max_timestamp'])) {
-                NasIcmpLatency::on('remote_pgsql')->updateOrCreate(
+                NasIcmpLatency::on('pgsql')->updateOrCreate(
                     [
                         'activation_plan_id' => $activationPlanId,
                         'collected_at' => $maxRtt['max_timestamp'],
@@ -2378,7 +2415,7 @@ class RrdController extends Controller
             // --- 8. Insert/update NasIcmpTimeout ---
             if (!empty($outageAnalysis['outage_periods'])) {
                 foreach ($outageAnalysis['outage_periods'] as $outage) {
-                    NasIcmpTimeout::on('remote_pgsql')->updateOrCreate(
+                    NasIcmpTimeout::on('pgsql')->updateOrCreate(
                         [
                             'activation_plan_id' => $activationPlanId,
                             'timeout_start' => $outage['start_time_formatted'],
