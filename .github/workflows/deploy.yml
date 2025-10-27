@@ -22,7 +22,7 @@ jobs:
 
       - name: Install Composer Dependencies
         # Runs Composer install to build vendor directory on the runner
-        run: composer install --no-dev --optimize-autoloader
+        run: composer install --optimize-autoloader
 
       - name: Sync Project Files via SCP
         uses: appleboy/scp-action@v0.1.7
