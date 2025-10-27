@@ -22,7 +22,7 @@ use App\Http\Controllers\RrdController;
 // Public routes (no auth) - MINIMAL SET
 // ----------------------------
 Route::get('/rrd-utilidation', [RrdController::class, 'getPortData']);
-Route::get('/rrd-cpu-utilizatiomn', [RrdController::class, 'getDeviceCpuData']);
+Route::get('/rrd-cpu-utilization', [RrdController::class, 'getDeviceCpuData']);
 Route::get('/rrd-ram-utilization', [RrdController::class, 'getMempoolPerformanceData']);
 Route::get('/rrd-storage-utilization', [RrdController::class, 'getSystemDiskStorageData']);
 Route::get('/rrd-icmp-utilization', [RrdController::class, 'getIcmpPerformanceData']);
