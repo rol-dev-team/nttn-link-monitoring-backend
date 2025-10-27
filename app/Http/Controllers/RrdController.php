@@ -6,7 +6,6 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
 use Symfony\Component\Process\Process;
 use Illuminate\Http\JsonResponse;
-use phpseclib3\Net\SSH2;
 use Illuminate\Support\Facades\DB;
 use DateTime;
 use DateTimeZone;
@@ -16,6 +15,9 @@ use App\Models\NasDiskUsage;
 use App\Models\NasIcmpLatency;
 use App\Models\NasIcmpTimeout;
 use Carbon\Carbon;
+use phpseclib3\Net\SFTP;
+use phpseclib3\Crypt\PublicKeyLoader;
+use phpseclib3\Net\SSH2;
 
 class RrdController extends Controller
 {
@@ -58,93 +60,341 @@ class RrdController extends Controller
     }
 
 
-//    public function getPortData(string $startDateString = null, string $endDateString = null)
-//    {
-//
-//        // $startDateString = $startDateString ?? '2025-10-01 01:05:00';
-//        // $endDateString   = $endDateString ?? '2025-10-02 01:05:00';
-//        $startDateString = $startDateString ?? '2025-10-01 01:05:00';
-//        $endDateString = $endDateString ?? '2025-10-02 01:05:00';
-//        // $startDateString = '2025-10-01 01:05:00';
-//        // $endDateString   = '2025-10-02 01:05:00';
-//
-//        $rrdFilePath = '/var/www/html/nttn-monitoring-application/partner-backend/storage/rrd/rrd/172.24.6.16/port-id2664.rrd';
-//
-//        // /opt/librenms/rrd/
-//
-//        $filename = basename($rrdFilePath);
-//        $port_id = (int)preg_replace('/[^0-9]/', '', $filename);
-//
-//        $path_parts = explode('/', $rrdFilePath);
-//        $host_ip = $path_parts[count($path_parts) - 2];
-//
-//        if (filter_var($host_ip, FILTER_VALIDATE_IP) === false) {
-//            $host_ip = 'Host IP not found';
-//        }
-//
-//        $resolution = '-r 300';
-//
-//
-//        $startUnix = strtotime($startDateString);
-//        $endUnix = strtotime($endDateString);
-//
-//        if ($startUnix === false || $endUnix === false || $startUnix >= $endUnix) {
-//            return response()->json([
-//                'status' => 'error',
-//                'message' => 'Invalid datetime format or range provided. Start time must be before end time.'
-//            ], 400);
-//        }
-//
-//        $startTime = '-s ' . $startUnix;
-//        $endTime = '-e ' . $endUnix;
-//
-//        $commandAvg = self::RRDTOOL_EXECUTABLE
-//            . " fetch \"$rrdFilePath\" AVERAGE $resolution $startTime $endTime";
-//
-//
-//        $commandMax = self::RRDTOOL_EXECUTABLE
-//            . " fetch \"$rrdFilePath\" MAX $resolution $startTime $endTime";
-//
-//        $dataOutputAvg = shell_exec($commandAvg);
-//        $dataOutputMax = shell_exec($commandMax);
-//
-//        if ($dataOutputAvg === null || trim($dataOutputAvg) === '') {
-//            return response()->json([
-//                'status' => 'error',
-//                'message' => 'Failed to execute rrdtool or no data returned.'
-//            ], 500);
-//        }
-//
-//        // --- Data Parsing and Summary ---
-//        $parsedDataAvg = $this->parseRrdFetchOutput($dataOutputAvg);
-//        $parsedDataMax = $this->parseRrdFetchOutput($dataOutputMax);
-//
-//        $trafficSummary = $this->getTrafficSummary($parsedDataAvg, $parsedDataMax);
-//
-//
-//        return response()->json([
-//            'status' => 'success',
-//            'host_ip' => $host_ip,
-//            'port_id' => $port_id,
-//            'data_source' => $rrdFilePath,
-//            'traffic_summary' => $trafficSummary,
-//            'results' => $parsedDataAvg,
-//            'requested_range' => [
-//                'start_unix' => $startUnix,
-//                'end_unix' => $endUnix
-//            ]
-//        ]);
-//    }
+    // public function getPortData(string $startDateString = null, string $endDateString = null): JsonResponse
+    // {
+    //     $rrdFileBaseDir = '/var/www/html/nttn-monitoring-application/partner-backend/storage/rrd/rrd/';
+    //     $resolution = '-r 300';
+    //     $timezone = 'Asia/Dhaka'; // Bangladesh timezone
+
+    //     // Fetch NAS IPs
+    //     $nasIps = DB::connection('pgsql')
+    //         ->table('partner_activation_plans')
+    //         ->pluck('nas_ip', 'id')
+    //         ->filter()
+    //         ->unique();
+
+    //     if ($nasIps->isEmpty()) {
+    //         return response()->json([
+    //             'status' => 'error',
+    //             'message' => 'No NAS IPs found in the database.'
+    //         ], 404);
+    //     }
+
+    //     $hostsData = [];
+
+    //     foreach ($nasIps as $activationPlanId => $host_ip) {
+    //         $host_ip = trim($host_ip);
+    //         if (empty($host_ip)) {
+    //             $hostsData[$activationPlanId] = [
+    //                 'status' => 'error',
+    //                 'message' => 'Empty NAS IP found for activation plan ID ' . $activationPlanId
+    //             ];
+    //             continue;
+    //         }
+
+    //         // --- Determine Start/End Datetime Based on Last Record ---
+    //         $latestCreatedAt = DB::connection('pgsql')
+    //             ->table('nas_interface_utilizations as c')
+    //             ->join('partner_activation_plans as p', 'c.activation_plan_id', '=', 'p.id')
+    //             ->where('p.nas_ip', $host_ip)
+    //             ->max('c.created_at');
+
+    //         if ($latestCreatedAt) {
+    //             $startDate = Carbon::parse($latestCreatedAt, $timezone)->addSecond();
+    //         } else {
+    //             $startDate = Carbon::now($timezone)->subMinutes(30);
+    //         }
+    //         $endDate = Carbon::now($timezone);
+
+    //         // Format for display
+    //         $startDateString = $startDate->format('Y-m-d H:i:s');
+    //         $endDateString = $endDate->format('Y-m-d H:i:s');
+
+    //         if ($startDate->gte($endDate)) {
+    //             $hostsData[$host_ip] = [
+    //                 'status' => 'info',
+    //                 'message' => "No new port data to process for host $host_ip. Last collected at: $latestCreatedAt",
+    //                 'last_collected_at' => $latestCreatedAt,
+    //             ];
+    //             continue;
+    //         }
+
+    //         // Convert to UNIX timestamps for RRDTool (RRD expects UTC)
+    //         $startUnix = $startDate->timestamp;
+    //         $endUnix = $endDate->timestamp;
+    //         $startTime = '-s ' . $startUnix;
+    //         $endTime = '-e ' . $endUnix;
+
+    //         // --- Process RRD files ---
+    //         $portRrdDirectory = rtrim($rrdFileBaseDir, '/') . '/' . $host_ip;
+
+    //         if (!is_dir($portRrdDirectory)) {
+    //             Log::warning("RRD directory not found: '$portRrdDirectory'");
+    //             $hostsData[$host_ip] = [
+    //                 'status' => 'error',
+    //                 'message' => "RRD directory for host $host_ip not found. Checked: '$portRrdDirectory'"
+    //             ];
+    //             continue;
+    //         }
+
+    //         $portFiles = glob($portRrdDirectory . '/port-id*.rrd');
+    //         if (empty($portFiles)) {
+    //             $hostsData[$host_ip] = [
+    //                 'status' => 'error',
+    //                 'message' => "No port RRD files found for host $host_ip."
+    //             ];
+    //             continue;
+    //         }
+
+    //         $portsData = [];
+
+    //         foreach ($portFiles as $rrdFilePath) {
+    //             $filename = basename($rrdFilePath);
+    //             $port_id = (int)preg_replace('/[^0-9]/', '', $filename);
+
+    //             $commandAvg = self::RRDTOOL_EXECUTABLE . " fetch \"$rrdFilePath\" AVERAGE $resolution $startTime $endTime";
+    //             $commandMax = self::RRDTOOL_EXECUTABLE . " fetch \"$rrdFilePath\" MAX $resolution $startTime $endTime";
+
+    //             $dataOutputAvg = shell_exec($commandAvg);
+    //             $dataOutputMax = shell_exec($commandMax);
+
+    //             if (empty($dataOutputAvg) || empty($dataOutputMax)) {
+    //                 Log::warning("Empty RRD fetch output for file: $rrdFilePath");
+    //                 continue;
+    //             }
+
+    //             $parsedDataAvg = $this->parseRrdFetchOutput($dataOutputAvg);
+    //             $parsedDataMax = $this->parseRrdFetchOutput($dataOutputMax);
+    //             $trafficSummary = $this->getTrafficSummary($parsedDataAvg, $parsedDataMax);
+
+    //             if (!empty($trafficSummary['max_rate'])) {
+    //                 $maxDownloadMbps = $trafficSummary['max_rate']['in_mbps'] ?? 0;
+    //                 $maxUploadMbps = $trafficSummary['max_rate']['out_mbps'] ?? 0;
+    //                 $maxDownloadTime = $trafficSummary['max_rate']['in_peak_time'] ?? now($timezone);
+    //                 $maxUploadTime = $trafficSummary['max_rate']['out_peak_time'] ?? now($timezone);
+
+    //                 try {
+    //                     \App\Models\NasInterfaceUtilization::on('pgsql')->create([
+    //                         'activation_plan_id' => $activationPlanId,
+    //                         'interface_port' => $port_id,
+    //                         'max_download_mbps' => $maxDownloadMbps,
+    //                         'max_upload_mbps' => $maxUploadMbps,
+    //                         'max_download_collected_at' => $maxDownloadTime,
+    //                         'max_upload_collected_at' => $maxUploadTime,
+    //                     ]);
+    //                 } catch (\Exception $e) {
+    //                     Log::error("Failed to insert utilization for port $port_id ($host_ip): " . $e->getMessage());
+    //                     $hostsData[$host_ip]['errors'][] = "Failed to insert for port $port_id: " . $e->getMessage();
+    //                     continue;
+    //                 }
+
+    //                 $portsData[] = [
+    //                     'port_id' => $port_id,
+    //                     'traffic_summary' => $trafficSummary,
+    //                 ];
+    //             }
+    //         }
+
+    //         $hostsData[$host_ip] = [
+    //             'status' => 'success',
+    //             'activation_plan_id' => $activationPlanId,
+    //             'requested_range' => [
+    //                 'start_datetime' => $startDateString,
+    //                 'end_datetime' => $endDateString,
+    //             ],
+    //             'port_count' => count($portsData),
+    //             'ports' => $portsData
+    //         ];
+    //     }
+
+    //     return response()->json([
+    //         'status' => 'success',
+    //         'hosts' => $hostsData,
+    //     ]);
+    // }
+
+    // new 220
+
+    // public function getPortData(string $startDateString = null, string $endDateString = null): JsonResponse
+    // {
+    //     $rrdFileBaseDir = '/var/www/html/nttn-monitoring-application/partner-backend/storage/rrd/rrd/';
+    //     $resolution = '-r 300';
+    //     $timezone = 'Asia/Dhaka'; // Bangladesh timezone
+
+    //     // Fetch NAS IPs
+    //     $nasIps = DB::connection('pgsql')
+    //         ->table('partner_activation_plans')
+    //         ->pluck('nas_ip', 'id')
+    //         ->filter()
+    //         ->unique();
+
+    //     if ($nasIps->isEmpty()) {
+    //         return response()->json([
+    //             'status' => 'error',
+    //             'message' => 'No NAS IPs found in the database.'
+    //         ], 404);
+    //     }
+
+    //     $hostsData = [];
+
+    //     foreach ($nasIps as $activationPlanId => $host_ip) {
+    //         $host_ip = trim($host_ip);
+    //         if (empty($host_ip)) {
+    //             $hostsData[$activationPlanId] = [
+    //                 'status' => 'error',
+    //                 'message' => 'Empty NAS IP found for activation plan ID ' . $activationPlanId
+    //             ];
+    //             continue;
+    //         }
+
+    //         $portRrdDirectory = rtrim($rrdFileBaseDir, '/') . '/' . $host_ip;
+
+    //         if (!is_dir($portRrdDirectory)) {
+    //             Log::warning("RRD directory not found: '$portRrdDirectory'");
+    //             $hostsData[$host_ip] = [
+    //                 'status' => 'error',
+    //                 'message' => "RRD directory for host $host_ip not found. Checked: '$portRrdDirectory'"
+    //             ];
+    //             continue;
+    //         }
+
+    //         $portFiles = glob($portRrdDirectory . '/port-id*.rrd');
+    //         if (empty($portFiles)) {
+    //             $hostsData[$host_ip] = [
+    //                 'status' => 'error',
+    //                 'message' => "No port RRD files found for host $host_ip."
+    //             ];
+    //             continue;
+    //         }
+
+    //         $portsData = [];
+
+    //         foreach ($portFiles as $rrdFilePath) {
+    //             $filename = basename($rrdFilePath);
+    //             $port_id = (int)preg_replace('/[^0-9]/', '', $filename);
+
+    //             // --- 🧠 Find latest record per NAS IP + interface_port ---
+    //             $latestCreatedAt = DB::connection('pgsql')
+    //                 ->table('nas_interface_utilizations as c')
+    //                 ->join('partner_activation_plans as p', 'c.activation_plan_id', '=', 'p.id')
+    //                 ->where('p.nas_ip', $host_ip)
+    //                 ->where('c.interface_port', $port_id)
+    //                 ->max('c.created_at');
+
+    //             if ($latestCreatedAt) {
+    //                 // Start time = last record + 1 sec
+    //                 $startDate = Carbon::parse($latestCreatedAt, $timezone)->addSecond();
+    //             } else {
+    //                 // If no data exists for this port, start 1 hour ago
+    //                 $startDate = Carbon::now($timezone)->subHour();
+    //             }
+
+    //             $endDate = Carbon::now($timezone);
+
+    //             // Format for display
+    //             $startDateString = $startDate->format('Y-m-d H:i:s');
+    //             $endDateString = $endDate->format('Y-m-d H:i:s');
+
+    //             if ($startDate->gte($endDate)) {
+    //                 $portsData[] = [
+    //                     'port_id' => $port_id,
+    //                     'status' => 'info',
+    //                     'message' => "No new data to process for port $port_id. Last collected at: $latestCreatedAt",
+    //                 ];
+    //                 continue;
+    //             }
+
+    //             // Convert to UNIX timestamps for RRDTool
+    //             $startUnix = $startDate->timestamp;
+    //             $endUnix = $endDate->timestamp;
+    //             $startTime = '-s ' . $startUnix;
+    //             $endTime = '-e ' . $endUnix;
+
+    //             $commandAvg = self::RRDTOOL_EXECUTABLE . " fetch \"$rrdFilePath\" AVERAGE $resolution $startTime $endTime";
+    //             $commandMax = self::RRDTOOL_EXECUTABLE . " fetch \"$rrdFilePath\" MAX $resolution $startTime $endTime";
+
+    //             $dataOutputAvg = shell_exec($commandAvg);
+    //             $dataOutputMax = shell_exec($commandMax);
+
+    //             if (empty($dataOutputAvg) || empty($dataOutputMax)) {
+    //                 Log::warning("Empty RRD fetch output for file: $rrdFilePath");
+    //                 continue;
+    //             }
+
+    //             $parsedDataAvg = $this->parseRrdFetchOutput($dataOutputAvg);
+    //             $parsedDataMax = $this->parseRrdFetchOutput($dataOutputMax);
+    //             $trafficSummary = $this->getTrafficSummary($parsedDataAvg, $parsedDataMax);
+
+    //             if (!empty($trafficSummary['max_rate'])) {
+    //                 $maxDownloadMbps = $trafficSummary['max_rate']['in_mbps'] ?? 0;
+    //                 $maxUploadMbps = $trafficSummary['max_rate']['out_mbps'] ?? 0;
+    //                 $maxDownloadTime = $trafficSummary['max_rate']['in_peak_time'] ?? now($timezone);
+    //                 $maxUploadTime = $trafficSummary['max_rate']['out_peak_time'] ?? now($timezone);
+
+    //                 try {
+    //                     \App\Models\NasInterfaceUtilization::on('pgsql')->create([
+    //                         'activation_plan_id' => $activationPlanId,
+    //                         'interface_port' => $port_id,
+    //                         'max_download_mbps' => $maxDownloadMbps,
+    //                         'max_upload_mbps' => $maxUploadMbps,
+    //                         'max_download_collected_at' => $maxDownloadTime,
+    //                         'max_upload_collected_at' => $maxUploadTime,
+    //                     ]);
+    //                 } catch (\Exception $e) {
+    //                     Log::error("Failed to insert utilization for port $port_id ($host_ip): " . $e->getMessage());
+    //                     $portsData[] = [
+    //                         'port_id' => $port_id,
+    //                         'status' => 'error',
+    //                         'message' => $e->getMessage(),
+    //                     ];
+    //                     continue;
+    //                 }
+
+    //                 $portsData[] = [
+    //                     'port_id' => $port_id,
+    //                     'status' => 'success',
+    //                     'requested_range' => [
+    //                         'start_datetime' => $startDateString,
+    //                         'end_datetime' => $endDateString,
+    //                     ],
+    //                     'traffic_summary' => $trafficSummary,
+    //                 ];
+    //             }
+    //         }
+
+    //         $hostsData[$host_ip] = [
+    //             'status' => 'success',
+    //             'activation_plan_id' => $activationPlanId,
+    //             'port_count' => count($portsData),
+    //             'ports' => $portsData
+    //         ];
+    //     }
+
+    //     return response()->json([
+    //         'status' => 'success',
+    //         'hosts' => $hostsData,
+    //     ]);
+    // }
 
 
-//    public function getPortData(string $startDateString = null, string $endDateString = null): JsonResponse { $startDateString = $startDateString ?? '2025-10-01 01:05:00'; $endDateString = $endDateString ?? '2025-10-02 01:05:00'; $rrdFileBaseDir = '/var/www/html/nttn-monitoring-application/partner-backend/storage/rrd/rrd/'; $resolution = '-r 300'; $startUnix = strtotime($startDateString); $endUnix = strtotime($endDateString); if ($startUnix === false || $endUnix === false || $startUnix >= $endUnix) { return response()->json([ 'status' => 'error', 'message' => 'Invalid datetime format or range provided.' ], 400); } $startTime = '-s ' . $startUnix; $endTime = '-e ' . $endUnix;  $nasIps = DB::connection('pgsql') ->table('partner_activation_plans') ->pluck('nas_ip', 'id') ->filter() ->unique(); if ($nasIps->isEmpty()) { return response()->json([ 'status' => 'error', 'message' => 'No NAS IPs found in the database.' ], 404); } $hostsData = []; foreach ($nasIps as $activationPlanId => $host_ip) { $portRrdDirectory = $rrdFileBaseDir . $host_ip; if (!is_dir($portRrdDirectory)) { $hostsData[$host_ip] = [ 'status' => 'error', 'message' => "RRD directory for host $host_ip not found." ]; continue; }  $portFiles = glob($portRrdDirectory . '/port-id*.rrd'); if (empty($portFiles)) { $hostsData[$host_ip] = [ 'status' => 'error', 'message' => "No port RRD files found for host $host_ip." ]; continue; } $portsData = []; foreach ($portFiles as $rrdFilePath) { $filename = basename($rrdFilePath); $port_id = (int)preg_replace('/[^0-9]/', '', $filename); $commandAvg = self::RRDTOOL_EXECUTABLE . " fetch \"$rrdFilePath\" AVERAGE $resolution $startTime $endTime"; $commandMax = self::RRDTOOL_EXECUTABLE . " fetch \"$rrdFilePath\" MAX $resolution $startTime $endTime"; $dataOutputAvg = shell_exec($commandAvg); $dataOutputMax = shell_exec($commandMax); if (empty($dataOutputAvg) || empty($dataOutputMax)) { continue; } $parsedDataAvg = $this->parseRrdFetchOutput($dataOutputAvg); $parsedDataMax = $this->parseRrdFetchOutput($dataOutputMax); $trafficSummary = $this->getTrafficSummary($parsedDataAvg, $parsedDataMax); if (!empty($trafficSummary['max_rate'])) { $maxDownloadMbps = $trafficSummary['max_rate']['in_mbps'] ?? 0; $maxUploadMbps = $trafficSummary['max_rate']['out_mbps'] ?? 0; $maxDownloadTime = $trafficSummary['max_rate']['in_peak_time'] ?? null; $maxUploadTime = $trafficSummary['max_rate']['out_peak_time'] ?? null;  try { \App\Models\NasInterfaceUtilization::on('pgsql')->create([ 'activation_plan_id' => $activationPlanId, 'interface_port' => $port_id, 'max_download_mbps' => $maxDownloadMbps, 'max_upload_mbps' => $maxUploadMbps, 'max_download_collected_at' => $maxDownloadTime, 'max_upload_collected_at' => $maxUploadTime, ]); } catch (\Exception $e) { $hostsData[$host_ip]['errors'][] = "Failed to insert for port $port_id: " . $e->getMessage(); continue; } $portsData[] = [ 'port_id' => $port_id, 'traffic_summary' => $trafficSummary, ]; } } $hostsData[$host_ip] = [ 'status' => 'success', 'activation_plan_id' => $activationPlanId, 'port_count' => count($portsData), 'ports' => $portsData ]; } return response()->json([ 'status' => 'success', 'hosts' => $hostsData, ]); }
-
-
-    public function getPortData(string $startDateString = null, string $endDateString = null): JsonResponse
+    public function getPortDataMod(string $startDateString = null, string $endDateString = null): JsonResponse
     {
-        $rrdFileBaseDir = '/var/www/html/nttn-monitoring-application/partner-backend/storage/rrd/rrd/';
+        $remoteRrdBaseDir = '/opt/librenms/rrd/';
+        $remoteHost = '172.17.18.82';
+        $remotePort = 65122;
+        $remoteUser = 'linkmon';
+        $remotePass = '!TB5731roL#';
         $resolution = '-r 300';
         $timezone = 'Asia/Dhaka'; // Bangladesh timezone
+
+        // Connect to remote server via SFTP
+        $sftp = new SFTP($remoteHost, $remotePort);
+        if (!$sftp->login($remoteUser, $remotePass)) {
+            return response()->json([
+                'status' => 'error',
+                'message' => 'SFTP login failed to remote RRD server.'
+            ], 500);
+        }
 
         // Fetch NAS IPs
         $nasIps = DB::connection('pgsql')
@@ -172,56 +422,31 @@ class RrdController extends Controller
                 continue;
             }
 
-            // --- Determine Start/End Datetime Based on Last Record ---
-            $latestCreatedAt = DB::connection('pgsql')
-                ->table('nas_interface_utilizations as c')
-                ->join('partner_activation_plans as p', 'c.activation_plan_id', '=', 'p.id')
-                ->where('p.nas_ip', $host_ip)
-                ->max('c.created_at');
+            $portRrdDirectory = rtrim($remoteRrdBaseDir, '/') . '/' . $host_ip;
 
-            if ($latestCreatedAt) {
-                $startDate = Carbon::parse($latestCreatedAt, $timezone)->addSecond();
-            } else {
-                $startDate = Carbon::now($timezone)->subMinutes(30);
-            }
-            $endDate = Carbon::now($timezone);
-
-            // Format for display
-            $startDateString = $startDate->format('Y-m-d H:i:s');
-            $endDateString = $endDate->format('Y-m-d H:i:s');
-
-            if ($startDate->gte($endDate)) {
-                $hostsData[$host_ip] = [
-                    'status' => 'info',
-                    'message' => "No new port data to process for host $host_ip. Last collected at: $latestCreatedAt",
-                    'last_collected_at' => $latestCreatedAt,
-                ];
-                continue;
-            }
-
-            // Convert to UNIX timestamps for RRDTool (RRD expects UTC)
-            $startUnix = $startDate->timestamp;
-            $endUnix = $endDate->timestamp;
-            $startTime = '-s ' . $startUnix;
-            $endTime = '-e ' . $endUnix;
-
-            // --- Process RRD files ---
-            $portRrdDirectory = rtrim($rrdFileBaseDir, '/') . '/' . $host_ip;
-
-            if (!is_dir($portRrdDirectory)) {
-                Log::warning("RRD directory not found: '$portRrdDirectory'");
-                $hostsData[$host_ip] = [
+            // Check if remote directory exists via SFTP
+            $remoteDirListing = $sftp->nlist($portRrdDirectory);
+            if ($remoteDirListing === false) {
+                Log::warning("Remote RRD directory not found: '$portRrdDirectory' on $remoteHost");
+                $hostsData[$host_ip] = [  // Changed back to $host_ip as key
                     'status' => 'error',
-                    'message' => "RRD directory for host $host_ip not found. Checked: '$portRrdDirectory'"
+                    'message' => "RRD directory for host $host_ip not found on remote server. Checked: '$portRrdDirectory'"
                 ];
                 continue;
             }
 
-            $portFiles = glob($portRrdDirectory . '/port-id*.rrd');
+            // Get port files list from remote server
+            $portFiles = [];
+            foreach ($remoteDirListing as $file) {
+                if (str_starts_with($file, 'port-id') && str_ends_with($file, '.rrd')) {
+                    $portFiles[] = $portRrdDirectory . '/' . $file;
+                }
+            }
+
             if (empty($portFiles)) {
-                $hostsData[$host_ip] = [
+                $hostsData[$host_ip] = [  // Changed back to $host_ip as key
                     'status' => 'error',
-                    'message' => "No port RRD files found for host $host_ip."
+                    'message' => "No port RRD files found for host $host_ip on remote server."
                 ];
                 continue;
             }
@@ -232,14 +457,66 @@ class RrdController extends Controller
                 $filename = basename($rrdFilePath);
                 $port_id = (int)preg_replace('/[^0-9]/', '', $filename);
 
-                $commandAvg = self::RRDTOOL_EXECUTABLE . " fetch \"$rrdFilePath\" AVERAGE $resolution $startTime $endTime";
-                $commandMax = self::RRDTOOL_EXECUTABLE . " fetch \"$rrdFilePath\" MAX $resolution $startTime $endTime";
+                // --- 🧠 Find latest record per NAS IP + interface_port ---
+                $latestCreatedAt = DB::connection('pgsql')
+                    ->table('nas_interface_utilizations as c')
+                    ->join('partner_activation_plans as p', 'c.activation_plan_id', '=', 'p.id')
+                    ->where('p.nas_ip', $host_ip)
+                    ->where('c.interface_port', $port_id)
+                    ->max('c.created_at');
+
+                if ($latestCreatedAt) {
+                    // Start time = last record + 1 sec
+                    $startDate = Carbon::parse($latestCreatedAt, $timezone)->addSecond();
+                } else {
+                    // If no data exists for this port, start 1 hour ago
+                    $startDate = Carbon::now($timezone)->subHour();
+                }
+
+                $endDate = Carbon::now($timezone);
+
+                // Format for display
+                $startDateString = $startDate->format('Y-m-d H:i:s');
+                $endDateString = $endDate->format('Y-m-d H:i:s');
+
+                if ($startDate->gte($endDate)) {
+                    $portsData[] = [
+                        'port_id' => $port_id,
+                        'status' => 'info',
+                        'message' => "No new data to process for port $port_id. Last collected at: $latestCreatedAt",
+                    ];
+                    continue;
+                }
+
+                // Convert to UNIX timestamps for RRDTool
+                $startUnix = $startDate->timestamp;
+                $endUnix = $endDate->timestamp;
+                $startTime = '-s ' . $startUnix;
+                $endTime = '-e ' . $endUnix;
+
+                // Download RRD file to temporary location
+                $tmpFile = tempnam(sys_get_temp_dir(), 'rrd_');
+                $rrdFileContent = $sftp->get($rrdFilePath);
+
+                if ($rrdFileContent === false) {
+                    Log::warning("Failed to download RRD file from remote server: $rrdFilePath");
+                    continue;
+                }
+
+                file_put_contents($tmpFile, $rrdFileContent);
+
+                // Execute RRD commands locally on downloaded file
+                $commandAvg = self::RRDTOOL_EXECUTABLE . " fetch \"$tmpFile\" AVERAGE $resolution $startTime $endTime";
+                $commandMax = self::RRDTOOL_EXECUTABLE . " fetch \"$tmpFile\" MAX $resolution $startTime $endTime";
 
                 $dataOutputAvg = shell_exec($commandAvg);
                 $dataOutputMax = shell_exec($commandMax);
 
+                // Clean up temporary file
+                unlink($tmpFile);
+
                 if (empty($dataOutputAvg) || empty($dataOutputMax)) {
-                    Log::warning("Empty RRD fetch output for file: $rrdFilePath");
+                    Log::warning("Empty RRD fetch output for remote file: $rrdFilePath");
                     continue;
                 }
 
@@ -264,24 +541,247 @@ class RrdController extends Controller
                         ]);
                     } catch (\Exception $e) {
                         Log::error("Failed to insert utilization for port $port_id ($host_ip): " . $e->getMessage());
-                        $hostsData[$host_ip]['errors'][] = "Failed to insert for port $port_id: " . $e->getMessage();
+                        $portsData[] = [
+                            'port_id' => $port_id,
+                            'status' => 'error',
+                            'message' => $e->getMessage(),
+                        ];
                         continue;
                     }
 
                     $portsData[] = [
                         'port_id' => $port_id,
+                        'status' => 'success',
+                        'requested_range' => [
+                            'start_datetime' => $startDateString,
+                            'end_datetime' => $endDateString,
+                        ],
                         'traffic_summary' => $trafficSummary,
                     ];
+                }
+            }
+
+            $hostsData[$host_ip] = [  // This is the key change - using $host_ip as array key
+                'status' => 'success',
+                'activation_plan_id' => $activationPlanId,
+                'port_count' => count($portsData),
+                'ports' => $portsData
+            ];
+        }
+
+        return response()->json([
+            'status' => 'success',
+            'hosts' => $hostsData,
+        ]);
+    }
+
+    // librenms RRD fetch
+
+
+    public function getPortData(string $startDateString = null, string $endDateString = null): JsonResponse
+    {
+        $remoteRrdBaseDir = '/opt/librenms/rrd/';
+        $remoteHost = '172.17.18.82';
+        $remotePort = 65122;
+        $remoteUser = 'linkmon';
+        $remotePass = '!TB5731roL#';
+        $resolution = '-r 300';
+        $timezone = 'Asia/Dhaka';
+
+        // Connect to remote RRD server via SFTP
+        $sftp = new \phpseclib3\Net\SFTP($remoteHost, $remotePort);
+        if (!$sftp->login($remoteUser, $remotePass)) {
+            return response()->json([
+                'status' => 'error',
+                'message' => 'SFTP login failed to remote RRD server.'
+            ], 500);
+        }
+
+        // Fetch NAS IPs
+        $nasIps = DB::connection('pgsql')
+            ->table('partner_activation_plans')
+            ->pluck('nas_ip', 'id')
+            ->filter()
+            ->unique();
+
+        if ($nasIps->isEmpty()) {
+            return response()->json([
+                'status' => 'error',
+                'message' => 'No NAS IPs found in the database.'
+            ], 404);
+        }
+
+        $hostsData = [];
+
+        foreach ($nasIps as $activationPlanId => $host_ip) {
+            $host_ip = trim($host_ip);
+            if (empty($host_ip)) {
+                $hostsData[$activationPlanId] = [
+                    'status' => 'error',
+                    'message' => 'Empty NAS IP found for activation plan ID ' . $activationPlanId
+                ];
+                continue;
+            }
+
+            $portRrdDirectory = rtrim($remoteRrdBaseDir, '/') . '/' . $host_ip;
+
+            // --- Check remote directory existence ---
+            $remoteDirListing = $sftp->nlist($portRrdDirectory);
+            if ($remoteDirListing === false) {
+                Log::warning("RRD directory not found: '$portRrdDirectory' on remote host");
+                $hostsData[$host_ip] = [
+                    'status' => 'error',
+                    'message' => "RRD directory for host $host_ip not found. Checked: '$portRrdDirectory'"
+                ];
+                continue;
+            }
+
+            /**
+             * STEP 1: Get allowed interfaces from your app DB
+             */
+            $allowedInterfaces = DB::connection('pgsql')
+                ->table('partner_interface_configs')
+                ->where('activation_plan_id', $activationPlanId)
+                ->pluck('interface_name')
+                ->toArray();
+
+            if (empty($allowedInterfaces)) {
+                $hostsData[$host_ip] = [
+                    'status' => 'warning',
+                    'message' => "No allowed interfaces found for activation plan ID $activationPlanId"
+                ];
+                continue;
+            }
+
+            /**
+             * STEP 2: Get matching LibreNMS port IDs
+             */
+            $portInfo = DB::connection('librenms')
+                ->table('devices as d')
+                ->join('ports as p', 'd.device_id', '=', 'p.device_id')
+                ->select('p.port_id', 'p.ifName')
+                ->where('d.hostname', $host_ip)
+                ->whereIn('p.ifName', $allowedInterfaces)
+                ->get();
+
+            $allowedPortIds = $portInfo->pluck('port_id')->toArray();
+
+            if (empty($allowedPortIds)) {
+                $hostsData[$host_ip] = [
+                    'status' => 'warning',
+                    'message' => "No matching port IDs found in LibreNMS for $host_ip and interfaces: " . implode(',', $allowedInterfaces)
+                ];
+                continue;
+            }
+
+            /**
+             * STEP 3: Filter RRD files by allowed port IDs
+             */
+            $portFiles = [];
+            foreach ($remoteDirListing as $file) {
+                foreach ($allowedPortIds as $pid) {
+                    if (str_starts_with($file, "port-id$pid") && str_ends_with($file, '.rrd')) {
+                        $portFiles[] = $portRrdDirectory . '/' . $file;
+                    }
+                }
+            }
+
+            if (empty($portFiles)) {
+                $hostsData[$host_ip] = [
+                    'status' => 'error',
+                    'message' => "No allowed port RRD files found for host $host_ip.",
+                ];
+                continue;
+            }
+
+            /**
+             * STEP 4: Process RRD files as before
+             */
+            $portsData = [];
+
+            foreach ($portFiles as $rrdFilePath) {
+                $filename = basename($rrdFilePath);
+                $port_id = (int)preg_replace('/[^0-9]/', '', $filename);
+
+                $latestCreatedAt = DB::connection('pgsql')
+                    ->table('nas_interface_utilizations as c')
+                    ->join('partner_activation_plans as p', 'c.activation_plan_id', '=', 'p.id')
+                    ->where('p.nas_ip', $host_ip)
+                    ->where('c.interface_port', $port_id)
+                    ->max('c.created_at');
+
+                if ($latestCreatedAt) {
+                    $startDate = Carbon::parse($latestCreatedAt, $timezone)->addSecond();
+                } else {
+                    $startDate = Carbon::now($timezone)->subHour();
+                }
+
+                $endDate = Carbon::now($timezone);
+
+                if ($startDate->gte($endDate)) {
+                    $portsData[] = [
+                        'port_id' => $port_id,
+                        'status' => 'info',
+                        'message' => "No new data to process for port $port_id. Last collected at: $latestCreatedAt",
+                    ];
+                    continue;
+                }
+
+                $tmpFile = tempnam(sys_get_temp_dir(), 'rrd_');
+                $rrdContent = $sftp->get($rrdFilePath);
+
+                if ($rrdContent === false) {
+                    Log::warning("Failed to fetch remote RRD file: $rrdFilePath");
+                    continue;
+                }
+
+                file_put_contents($tmpFile, $rrdContent);
+
+                $startUnix = $startDate->timestamp;
+                $endUnix = $endDate->timestamp;
+
+                $commandAvg = self::RRDTOOL_EXECUTABLE . " fetch \"$tmpFile\" AVERAGE $resolution -s $startUnix -e $endUnix";
+                $commandMax = self::RRDTOOL_EXECUTABLE . " fetch \"$tmpFile\" MAX $resolution -s $startUnix -e $endUnix";
+
+                $dataOutputAvg = shell_exec($commandAvg);
+                $dataOutputMax = shell_exec($commandMax);
+
+                unlink($tmpFile);
+
+                if (empty($dataOutputAvg) || empty($dataOutputMax)) {
+                    Log::warning("Empty RRD output for port $port_id ($host_ip)");
+                    continue;
+                }
+
+                $parsedDataAvg = $this->parseRrdFetchOutput($dataOutputAvg);
+                $parsedDataMax = $this->parseRrdFetchOutput($dataOutputMax);
+                $trafficSummary = $this->getTrafficSummary($parsedDataAvg, $parsedDataMax);
+
+                if (!empty($trafficSummary['max_rate'])) {
+                    try {
+                        \App\Models\NasInterfaceUtilization::on('pgsql')->create([
+                            'activation_plan_id' => $activationPlanId,
+                            'interface_port' => $port_id,
+                            'max_download_mbps' => $trafficSummary['max_rate']['in_mbps'] ?? 0,
+                            'max_upload_mbps' => $trafficSummary['max_rate']['out_mbps'] ?? 0,
+                            'max_download_collected_at' => $trafficSummary['max_rate']['in_peak_time'] ?? now($timezone),
+                            'max_upload_collected_at' => $trafficSummary['max_rate']['out_peak_time'] ?? now($timezone),
+                        ]);
+
+                        $portsData[] = [
+                            'port_id' => $port_id,
+                            'status' => 'success',
+                            'traffic_summary' => $trafficSummary,
+                        ];
+                    } catch (\Exception $e) {
+                        Log::error("Failed to insert utilization for port $port_id ($host_ip): " . $e->getMessage());
+                    }
                 }
             }
 
             $hostsData[$host_ip] = [
                 'status' => 'success',
                 'activation_plan_id' => $activationPlanId,
-                'requested_range' => [
-                    'start_datetime' => $startDateString,
-                    'end_datetime' => $endDateString,
-                ],
                 'port_count' => count($portsData),
                 'ports' => $portsData
             ];
@@ -294,6 +794,105 @@ class RrdController extends Controller
     }
 
 
+
+// public function getPortData(): JsonResponse
+// {
+//     $remoteRrdBaseDir = '/opt/librenms/rrd/';
+//     $remoteHost = '172.17.18.82';
+//     $remoteUser = 'itbilladmin';
+//     $remotePass = 'hsr$8-2v%Qse-e@bS!g';
+//     $resolution = '-r 300';
+//     $timezone = 'Asia/Dhaka';
+
+//     // Connect to remote server via SFTP
+//     // $sftp = new SFTP($remoteHost, 65122); // adjust port if needed
+//     // if (!$sftp->login($remoteUser, $remotePass)) {
+//     //     return response()->json(['status' => 'error', 'message' => 'SFTP login failed.'], 500);
+//     // }
+
+//     // $sftp = new SSH2('172.17.18.82', 65122);
+//     //     if (!$sftp->login('linkmon', '!TB5731roL#')) {
+//     //         return response()->json(['status' => false, 'message' => 'SSH login failed'], 500);
+//     //     }
+//     $sftp = new SFTP('172.17.18.82', 65122);
+//         if (!$sftp->login('linkmon', '!TB5731roL#')) {
+//             return response()->json(['status' => false, 'message' => 'SFTP login failed'], 500);
+//         }
+
+//     // Fetch NAS IPs from LibreNMS DB
+//     $nasIps = DB::connection('librenms')
+//         ->table('devices')
+//         ->pluck('hostname', 'device_id')
+//         ->filter()
+//         ->unique();
+
+//     if ($nasIps->isEmpty()) {
+//         return response()->json(['status' => 'error', 'message' => 'No NAS IPs found in LibreNMS.'], 404);
+//     }
+
+//     $hostsData = [];
+
+//     foreach ($nasIps as $deviceId => $host_ip) {
+//         $host_ip = trim($host_ip);
+//         if (empty($host_ip)) continue;
+
+//         $startDate = Carbon::now($timezone)->subMinutes(30);
+//         $endDate   = Carbon::now($timezone);
+//         $startUnix = $startDate->timestamp;
+//         $endUnix   = $endDate->timestamp;
+//         $startTime = '-s ' . $startUnix;
+//         $endTime   = '-e ' . $endUnix;
+
+//         // Remote RRD directory
+//         $remoteDir = rtrim($remoteRrdBaseDir . $host_ip, '/') . '/';
+//         $portFiles = $sftp->nlist($remoteDir);
+//         if (!$portFiles) {
+//             $hostsData[$host_ip] = ['status' => 'error', 'message' => "No port RRD files found on remote server"];
+//             continue;
+//         }
+
+//         $portsData = [];
+
+//         foreach ($portFiles as $file) {
+//             if (!str_starts_with($file, 'port-id') || !str_ends_with($file, '.rrd')) continue;
+
+//             $remoteFilePath = $remoteDir . $file;
+//             $tmpFile = tempnam(sys_get_temp_dir(), 'rrd');
+//             file_put_contents($tmpFile, $sftp->get($remoteFilePath));
+
+//             // Fetch data using RRDTool locally
+//             $commandAvg = self::RRDTOOL_EXECUTABLE . " fetch \"$tmpFile\" AVERAGE $resolution $startTime $endTime";
+//             $commandMax = self::RRDTOOL_EXECUTABLE . " fetch \"$tmpFile\" MAX $resolution $startTime $endTime";
+
+//             $dataOutputAvg = shell_exec($commandAvg);
+//             $dataOutputMax = shell_exec($commandMax);
+
+//             unlink($tmpFile); // cleanup
+
+//             if (empty($dataOutputAvg) || empty($dataOutputMax)) continue;
+
+//             $parsedDataAvg = $this->parseRrdFetchOutput($dataOutputAvg);
+//             $parsedDataMax = $this->parseRrdFetchOutput($dataOutputMax);
+//             $trafficSummary = $this->getTrafficSummary($parsedDataAvg, $parsedDataMax);
+
+//             $port_id = (int)preg_replace('/[^0-9]/', '', $file);
+//             $portsData[] = ['port_id' => $port_id, 'traffic_summary' => $trafficSummary];
+//         }
+
+//         $hostsData[$host_ip] = [
+//             'status' => 'success',
+//             'activation_plan_id' => $deviceId,
+//             'requested_range' => [
+//                 'start_datetime' => $startDate->format('Y-m-d H:i:s'),
+//                 'end_datetime' => $endDate->format('Y-m-d H:i:s')
+//             ],
+//             'port_count' => count($portsData),
+//             'ports' => $portsData
+//         ];
+//     }
+
+//     return response()->json(['status' => 'success', 'hosts' => $hostsData]);
+// }
 
 
 
@@ -389,283 +988,180 @@ class RrdController extends Controller
     }
 
 
-
-    // public function getDeviceCpuData(string $startDateString = null, string $endDateString = null): JsonResponse
+    // from 220
+    // public function getDeviceCpuData(): JsonResponse
     // {
-
-
-
-    //     $startDateString = $startDateString ?? '2025-10-01 01:05:00';
-    //     $endDateString = $endDateString ?? '2025-10-02 01:05:00';
-
-
     //     $rrdFileBaseDir = '/var/www/html/nttn-monitoring-application/partner-backend/storage/rrd/rrd/';
+    //     $timezone = 'Asia/Dhaka'; // GMT+6
 
-    //     $host_ip = '172.24.6.16';
-    //     $cpuRrdDirectory = $rrdFileBaseDir . $host_ip;
+    //     // Fetch NAS IPs dynamically from remote PostgreSQL
+    //     $nasIps = DB::connection('pgsql')
+    //         ->table('partner_activation_plans')
+    //         ->pluck('nas_ip', 'id')
+    //         ->filter()
+    //         ->unique();
 
-
-    //     $startUnix = strtotime($startDateString);
-    //     $endUnix = strtotime($endDateString);
-
-    //     if ($startUnix === false || $endUnix === false || $startUnix >= $endUnix) {
+    //     if ($nasIps->isEmpty()) {
     //         return response()->json([
     //             'status' => 'error',
-    //             'message' => 'Invalid datetime format or range provided.'
-    //         ], 400);
-    //     }
-
-    //     $startTime = '-s ' . $startUnix;
-    //     $endTime = '-e ' . $endUnix;
-    //     $resolution = '-r 300';
-
-
-    //     $allCpuFiles = glob($cpuRrdDirectory . '/processor-hr-*.rrd');
-    //     $numProcessors = count($allCpuFiles);
-    //     $allCpuData = [];
-
-    //     if ($numProcessors === 0) {
-    //         return response()->json([
-    //             'status' => 'error',
-    //             'message' => "No processor RRD files found for host $host_ip in $cpuRrdDirectory."
+    //             'message' => 'No NAS IPs found in the database.'
     //         ], 404);
     //     }
 
-    //     foreach ($allCpuFiles as $cpuFilePath) {
-    //         $command = self::RRDTOOL_EXECUTABLE
-    //                   . " fetch \"$cpuFilePath\" AVERAGE $resolution $startTime $endTime";
+    //     $hostsData = [];
 
-    //         $output = shell_exec($command);
+    //     foreach ($nasIps as $activationPlanId => $host_ip) {
 
-    //         if (!empty($output)) {
-    //             $parsedData = $this->parseRrdFetchOutput($output);
+    //         $latestCreatedAt = DB::connection('pgsql')
+    //             ->table('nas_cpu_usages as c')
+    //             ->join('partner_activation_plans as p', 'c.activation_plan_id', '=', 'p.id')
+    //             ->where('p.nas_ip', $host_ip)
+    //             ->max('c.created_at');
 
-    //             foreach ($parsedData as $row) {
-    //                 $timestamp = $row['timestamp_unix'];
-
-    //                 $usage = $row['usage'] ?? 0.0;
-
-    //                 if (!isset($allCpuData[$timestamp])) {
-    //                     $allCpuData[$timestamp] = [
-    //                         'timestamp_unix' => $timestamp,
-    //                         'timestamp_formatted' => $row['timestamp_formatted'] ?? date('Y-m-d H:i:s', $timestamp),
-    //                         'total_usage' => 0.0,
-    //                         'count' => 0,
-    //                     ];
-    //                 }
-
-    //                 if (is_numeric($usage) && $usage !== null) {
-    //                     $allCpuData[$timestamp]['total_usage'] += (float)$usage;
-    //                     $allCpuData[$timestamp]['count']++;
-    //                 }
-    //             }
+    //         // Set start and end times
+    //         if ($latestCreatedAt) {
+    //             $startDate = Carbon::parse($latestCreatedAt, $timezone)->addSecond();
+    //         } else {
+    //             $startDate = Carbon::now($timezone)->subMinutes(30);
     //         }
-    //     }
+    //         $endDate = Carbon::now($timezone);
 
+    //         $startDateString = $startDate->format('Y-m-d H:i:s');
+    //         $endDateString = $endDate->format('Y-m-d H:i:s');
 
-    //     $aggregatedCpuResults = [];
-    //     $maxLoadPeak = 0.0;
-    //     $maxLoadTime = null;
-
-    //     foreach ($allCpuData as $data) {
-    //         if ($data['count'] > 0) {
-
-    //             $averageCpuPercent = round($data['total_usage'] / $data['count'], 2);
-
-    //             $aggregatedCpuResults[] = [
-    //                 'timestamp_unix' => $data['timestamp_unix'],
-    //                 'timestamp_formatted' => $data['timestamp_formatted'],
-    //                 'average_cpu_percent' => $averageCpuPercent,
+    //         if ($startDate->gte($endDate)) {
+    //             $hostsData[$host_ip] = [
+    //                 'status' => 'info',
+    //                 'message' => "No new CPU data to process for host $host_ip. Last collected at: $latestCreatedAt",
+    //                 'last_collected_at' => $latestCreatedAt,
     //             ];
+    //             continue;
+    //         }
 
+    //         $startUnix = $startDate->timestamp;
+    //         $endUnix = $endDate->timestamp;
+    //         $startTime = '-s ' . $startUnix;
+    //         $endTime = '-e ' . $endUnix;
+    //         $resolution = '-r 300';
 
-    //             if ($averageCpuPercent > $maxLoadPeak) {
-    //                 $maxLoadPeak = $averageCpuPercent;
-    //                 $maxLoadTime = $data['timestamp_formatted'];
+    //         $cpuRrdDirectory = rtrim($rrdFileBaseDir, '/') . '/' . $host_ip;
+
+    //         if (!is_dir($cpuRrdDirectory)) {
+    //             $hostsData[$host_ip] = [
+    //                 'status' => 'error',
+    //                 'message' => "RRD directory for host $host_ip not found."
+    //             ];
+    //             continue;
+    //         }
+
+    //         $allCpuFiles = glob($cpuRrdDirectory . '/processor-hr-*.rrd');
+    //         $numProcessors = count($allCpuFiles);
+    //         $allCpuData = [];
+
+    //         if ($numProcessors === 0) {
+    //             $hostsData[$host_ip] = [
+    //                 'status' => 'error',
+    //                 'message' => "No processor RRD files found for host $host_ip."
+    //             ];
+    //             continue;
+    //         }
+
+    //         foreach ($allCpuFiles as $cpuFilePath) {
+    //             $command = self::RRDTOOL_EXECUTABLE
+    //                 . " fetch \"$cpuFilePath\" AVERAGE $resolution $startTime $endTime";
+    //             $output = shell_exec($command);
+
+    //             if (!empty($output)) {
+    //                 $parsedData = $this->parseRrdFetchOutput($output);
+
+    //                 foreach ($parsedData as $row) {
+    //                     $timestamp = $row['timestamp_unix'];
+    //                     $usage = $row['usage'] ?? 0.0;
+
+    //                     if (!isset($allCpuData[$timestamp])) {
+    //                         $allCpuData[$timestamp] = [
+    //                             'timestamp_unix' => $timestamp,
+    //                             'timestamp_formatted' => isset($row['timestamp_unix'])
+    //                                 ? Carbon::createFromTimestamp($row['timestamp_unix'], $timezone)->format('Y-m-d H:i:s')
+    //                                 : date('Y-m-d H:i:s', $timestamp),
+    //                             'total_usage' => 0.0,
+    //                             'count' => 0,
+    //                         ];
+    //                     }
+
+    //                     if (is_numeric($usage)) {
+    //                         $allCpuData[$timestamp]['total_usage'] += (float)$usage;
+    //                         $allCpuData[$timestamp]['count']++;
+    //                     }
+    //                 }
     //             }
     //         }
+
+    //         $aggregatedCpuResults = [];
+    //         $maxLoadPeak = 0.0;
+    //         $maxLoadTime = null;
+
+    //         foreach ($allCpuData as $data) {
+    //             if ($data['count'] > 0) {
+    //                 $averageCpuPercent = round($data['total_usage'] / $data['count'], 2);
+    //                 $aggregatedCpuResults[] = [
+    //                     'timestamp_unix' => $data['timestamp_unix'],
+    //                     'timestamp_formatted' => $data['timestamp_formatted'],
+    //                     'average_cpu_percent' => $averageCpuPercent,
+    //                 ];
+
+    //                 if ($averageCpuPercent > $maxLoadPeak) {
+    //                     $maxLoadPeak = $averageCpuPercent;
+    //                     $maxLoadTime = $data['timestamp_formatted'];
+    //                 }
+    //             }
+    //         }
+
+    //         $allAverages = array_column($aggregatedCpuResults, 'average_cpu_percent');
+
+    //         $summary = [
+    //             'processor_count' => $numProcessors,
+    //             'average_load_overall' => !empty($allAverages) ? round(array_sum($allAverages) / count($allAverages), 2) : 0.0,
+    //             'max_load_peak' => $maxLoadPeak,
+    //             'max_load_peak_time' => $maxLoadTime,
+    //         ];
+
+    //         // Insert into nas_cpu_usages if new peak exists
+    //         if ($maxLoadPeak > 0 && $maxLoadTime) {
+    //             NasCpuUsage::on('pgsql')->create([
+    //                 'activation_plan_id' => $activationPlanId,
+    //                 'collected_at' => $maxLoadTime,
+    //                 'max_cpu_load' => $maxLoadPeak,
+    //             ]);
+    //         }
+
+    //         // Store host-wise results
+    //         $hostsData[$host_ip] = [
+    //             'status' => 'success',
+    //             'metric_type' => 'Aggregated_CPU_Usage',
+    //             'requested_range' => [
+    //                 'start_datetime' => $startDateString,
+    //                 'end_datetime' => $endDateString,
+    //             ],
+    //             'cpu_summary' => $summary,
+    //             'results' => $aggregatedCpuResults,
+    //         ];
     //     }
-
-
-    //     $allAverages = array_column($aggregatedCpuResults, 'average_cpu_percent');
-
-    //     $summary = [
-    //         'processor_count' => $numProcessors,
-    //         'average_load_overall' => !empty($allAverages) ? round(array_sum($allAverages) / count($allAverages), 2) : 0.0,
-    //         'max_load_peak' => $maxLoadPeak,
-    //         'max_load_peak_time' => $maxLoadTime,
-    //     ];
 
     //     return response()->json([
     //         'status' => 'success',
-    //         'host_ip' => $host_ip,
-    //         'metric_type' => 'Aggregated_CPU_Usage',
-    //         'requested_range' => [
-    //             'start_datetime' => $startDateString,
-    //             'end_datetime' => $endDateString,
-    //         ],
-    //         'cpu_summary' => $summary,
-    //         'results' => $aggregatedCpuResults,
+    //         'hosts' => $hostsData,
     //     ]);
     // }
 
-
-
-
-//    public function getDeviceCpuData(string $startDateString = null, string $endDateString = null): JsonResponse
-//    {
-//
-//
-//        $startDateString = $startDateString ?? '2025-10-01 01:05:00';
-//        $endDateString = $endDateString ?? '2025-10-02 01:05:00';
-//
-//        $rrdFileBaseDir = '/var/www/html/nttn-monitoring-application/partner-backend/storage/rrd/rrd/';
-//
-//        $startUnix = strtotime($startDateString);
-//        $endUnix = strtotime($endDateString);
-//
-//        if ($startUnix === false || $endUnix === false || $startUnix >= $endUnix) {
-//            return response()->json([
-//                'status' => 'error',
-//                'message' => 'Invalid datetime format or range provided.'
-//            ], 400);
-//        }
-//
-//        $startTime = '-s ' . $startUnix;
-//        $endTime = '-e ' . $endUnix;
-//        $resolution = '-r 300';
-//
-//        // Fetch NAS IPs dynamically from remote PostgreSQL
-//        $nasIps = DB::connection('pgsql')
-//            ->table('partner_activation_plans')
-//            ->pluck('nas_ip', 'id')
-//            ->filter()
-//            ->unique();
-//
-//        if ($nasIps->isEmpty()) {
-//            return response()->json([
-//                'status' => 'error',
-//                'message' => 'No NAS IPs found in the database.'
-//            ], 404);
-//        }
-//
-//        $hostsData = [];
-//
-//        foreach ($nasIps as $activationPlanId => $host_ip) {
-//            $cpuRrdDirectory = $rrdFileBaseDir . $host_ip;
-//
-//            if (!is_dir($cpuRrdDirectory)) {
-//                $hostsData[$host_ip] = [
-//                    'status' => 'error',
-//                    'message' => "RRD directory for host $host_ip not found."
-//                ];
-//                continue;
-//            }
-//
-//            $allCpuFiles = glob($cpuRrdDirectory . '/processor-hr-*.rrd');
-//            $numProcessors = count($allCpuFiles);
-//            $allCpuData = [];
-//
-//            if ($numProcessors === 0) {
-//                $hostsData[$host_ip] = [
-//                    'status' => 'error',
-//                    'message' => "No processor RRD files found for host $host_ip."
-//                ];
-//                continue;
-//            }
-//
-//            foreach ($allCpuFiles as $cpuFilePath) {
-//                $command = self::RRDTOOL_EXECUTABLE
-//                    . " fetch \"$cpuFilePath\" AVERAGE $resolution $startTime $endTime";
-//                $output = shell_exec($command);
-//
-//                if (!empty($output)) {
-//                    $parsedData = $this->parseRrdFetchOutput($output);
-//
-//                    foreach ($parsedData as $row) {
-//                        $timestamp = $row['timestamp_unix'];
-//                        $usage = $row['usage'] ?? 0.0;
-//
-//                        if (!isset($allCpuData[$timestamp])) {
-//                            $allCpuData[$timestamp] = [
-//                                'timestamp_unix' => $timestamp,
-//                                'timestamp_formatted' => $row['timestamp_formatted'] ?? date('Y-m-d H:i:s', $timestamp),
-//                                'total_usage' => 0.0,
-//                                'count' => 0,
-//                            ];
-//                        }
-//
-//                        if (is_numeric($usage)) {
-//                            $allCpuData[$timestamp]['total_usage'] += (float)$usage;
-//                            $allCpuData[$timestamp]['count']++;
-//                        }
-//                    }
-//                }
-//            }
-//
-//            // Aggregate per host
-//            $aggregatedCpuResults = [];
-//            $maxLoadPeak = 0.0;
-//            $maxLoadTime = null;
-//
-//            foreach ($allCpuData as $data) {
-//                if ($data['count'] > 0) {
-//                    $averageCpuPercent = round($data['total_usage'] / $data['count'], 2);
-//                    $aggregatedCpuResults[] = [
-//                        'timestamp_unix' => $data['timestamp_unix'],
-//                        'timestamp_formatted' => $data['timestamp_formatted'],
-//                        'average_cpu_percent' => $averageCpuPercent,
-//                    ];
-//
-//                    if ($averageCpuPercent > $maxLoadPeak) {
-//                        $maxLoadPeak = $averageCpuPercent;
-//                        $maxLoadTime = $data['timestamp_formatted'];
-//                    }
-//                }
-//            }
-//
-//            $allAverages = array_column($aggregatedCpuResults, 'average_cpu_percent');
-//
-//            $summary = [
-//                'processor_count' => $numProcessors,
-//                'average_load_overall' => !empty($allAverages) ? round(array_sum($allAverages) / count($allAverages), 2) : 0.0,
-//                'max_load_peak' => $maxLoadPeak,
-//                'max_load_peak_time' => $maxLoadTime,
-//            ];
-//
-//            // Insert or update in nas_cpu_usages table on remote PostgreSQL
-//            if ($maxLoadPeak > 0 && $maxLoadTime) {
-//
-//                NasCpuUsage::on('pgsql')->create([
-//                    'activation_plan_id' => $activationPlanId,
-//                    'collected_at' => $maxLoadTime,
-//                    'max_cpu_load' => $maxLoadPeak,
-//                ]);
-//            }
-//
-//            // Store host-wise results
-//            $hostsData[$host_ip] = [
-//                'status' => 'success',
-//                'metric_type' => 'Aggregated_CPU_Usage',
-//                'requested_range' => [
-//                    'start_datetime' => $startDateString,
-//                    'end_datetime' => $endDateString,
-//                ],
-//                'cpu_summary' => $summary,
-//                'results' => $aggregatedCpuResults,
-//            ];
-//        }
-//
-//        return response()->json([
-//            'status' => 'success',
-//            'hosts' => $hostsData,
-//        ]);
-//    }
-
-
+    // librenms
     public function getDeviceCpuData(): JsonResponse
     {
-        $rrdFileBaseDir = '/var/www/html/nttn-monitoring-application/partner-backend/storage/rrd/rrd/';
+        $remoteRrdBaseDir = '/opt/librenms/rrd/';
+        $remoteHost = '172.17.18.82';
+        $remotePort = 65122;
+        $remoteUser = 'linkmon';
+        $remotePass = '!TB5731roL#';
         $timezone = 'Asia/Dhaka'; // GMT+6
 
         // Fetch NAS IPs dynamically from remote PostgreSQL
@@ -680,6 +1176,15 @@ class RrdController extends Controller
                 'status' => 'error',
                 'message' => 'No NAS IPs found in the database.'
             ], 404);
+        }
+
+        // --- Initialize SFTP connection ---
+        $sftp = new SFTP($remoteHost, $remotePort);
+        if (!$sftp->login($remoteUser, $remotePass)) {
+            return response()->json([
+                'status' => 'error',
+                'message' => 'Failed to connect to remote RRD host via SFTP.'
+            ], 500);
         }
 
         $hostsData = [];
@@ -718,17 +1223,27 @@ class RrdController extends Controller
             $endTime = '-e ' . $endUnix;
             $resolution = '-r 300';
 
-            $cpuRrdDirectory = rtrim($rrdFileBaseDir, '/') . '/' . $host_ip;
+            $cpuRrdDirectory = rtrim($remoteRrdBaseDir, '/') . '/' . $host_ip;
 
-            if (!is_dir($cpuRrdDirectory)) {
+            // --- Check remote directory existence ---
+            $remoteDirListing = $sftp->nlist($cpuRrdDirectory);
+            if ($remoteDirListing === false) {
+                Log::warning("RRD directory not found: '$cpuRrdDirectory' on remote host");
                 $hostsData[$host_ip] = [
                     'status' => 'error',
-                    'message' => "RRD directory for host $host_ip not found."
+                    'message' => "RRD directory for host $host_ip not found. Checked: '$cpuRrdDirectory'"
                 ];
                 continue;
             }
 
-            $allCpuFiles = glob($cpuRrdDirectory . '/processor-hr-*.rrd');
+            // --- Filter CPU RRD files from remote listing ---
+            $allCpuFiles = [];
+            foreach ($remoteDirListing as $file) {
+                if (str_starts_with($file, 'processor-hr-') && str_ends_with($file, '.rrd')) {
+                    $allCpuFiles[] = $cpuRrdDirectory . '/' . $file;
+                }
+            }
+
             $numProcessors = count($allCpuFiles);
             $allCpuData = [];
 
@@ -743,7 +1258,9 @@ class RrdController extends Controller
             foreach ($allCpuFiles as $cpuFilePath) {
                 $command = self::RRDTOOL_EXECUTABLE
                     . " fetch \"$cpuFilePath\" AVERAGE $resolution $startTime $endTime";
-                $output = shell_exec($command);
+
+                // Execute command remotely through SSH
+                $output = $sftp->exec($command);
 
                 if (!empty($output)) {
                     $parsedData = $this->parseRrdFetchOutput($output);
@@ -829,573 +1346,163 @@ class RrdController extends Controller
     }
 
 
+    // from 220
 
 
-
-
-
-// public function getDeviceCpuData(string $startDateString = null, string $endDateString = null): JsonResponse
-// {
-//     $ssh = new SSH2('172.17.18.82', 65122);
-
-//     if (!$ssh->login('itbilladmin', 'hsr$8-2v%Qse-e@bS!g')) {
-//         return response()->json([
-//             'status' => false,
-//             'message' => 'SSH login failed'
-//         ], 500);
-//     }
-
-//     // Get all nas_ip from remote PostgreSQL database
-//     $nasIps = DB::connection('pgsql')
-//                 ->table('partner_activation_plans')
-//                 ->select('nas_ip')
-//                 ->get()
-//                 ->pluck('nas_ip')
-//                 ->filter() // Remove null/empty values
-//                 ->unique() // Remove duplicates
-//                 ->values();
-
-//     if ($nasIps->isEmpty()) {
-//         return response()->json([
-//             'status' => 'error',
-//             'message' => 'No nas_ip found in database'
-//         ], 404);
-//     }
-
-//     // Debug: Check what NAS IPs we got
-//     \Log::info('NAS IPs from database:', $nasIps->toArray());
-
-//     $startDateString = $startDateString ?? '2025-10-01 01:05:00';
-//     $endDateString = $endDateString ?? '2025-10-02 01:05:00';
-
-//     $rrdFileBaseDir = '/opt/librenms/rrd/';
-
-//     $startUnix = strtotime($startDateString);
-//     $endUnix = strtotime($endDateString);
-
-//     if ($startUnix === false || $endUnix === false || $startUnix >= $endUnix) {
-//         return response()->json([
-//             'status' => 'error',
-//             'message' => 'Invalid datetime format or range provided.'
-//         ], 400);
-//     }
-
-//     $startTime = '-s ' . $startUnix;
-//     $endTime = '-e ' . $endUnix;
-//     $resolution = '-r 300';
-
-//     $allHostsData = [];
-
-//     foreach ($nasIps as $host_ip) {
-//         try {
-//             \Log::info("Processing NAS IP: " . $host_ip);
-
-//             // Check if folder exists on remote server with better error handling
-//             $output = $ssh->exec('ls -lh /opt/librenms/rrd/' . $host_ip . ' 2>&1');
-
-//             \Log::info("SSH output for {$host_ip}: " . $output);
-
-//             // If folder doesn't exist, skip this nas_ip
-//             if (str_contains($output, 'No such file or directory') ||
-//                 str_contains($output, 'cannot access') ||
-//                 str_contains($output, 'not found') ||
-//                 empty(trim($output))) {
-
-//                 \Log::warning("RRD directory not found for host: " . $host_ip);
-//                 $allHostsData[$host_ip] = [
-//                     'status' => 'error',
-//                     'message' => 'RRD directory not found for this host',
-//                     'ssh_output' => trim($output) // Include SSH output for debugging
-//                 ];
-//                 continue;
-//             }
-
-//             $cpuRrdDirectory = $rrdFileBaseDir . $host_ip;
-
-//             \Log::info("Looking for RRD files in: " . $cpuRrdDirectory);
-
-//             $allCpuFiles = glob($cpuRrdDirectory . '/processor-hr-*.rrd');
-//             $numProcessors = count($allCpuFiles);
-//             $allCpuData = [];
-
-//             \Log::info("Found {$numProcessors} processor files for {$host_ip}");
-
-//             if ($numProcessors === 0) {
-//                 $allHostsData[$host_ip] = [
-//                     'status' => 'error',
-//                     'message' => "No processor RRD files found for host $host_ip",
-//                     'directory_checked' => $cpuRrdDirectory
-//                 ];
-//                 continue;
-//             }
-
-//             foreach ($allCpuFiles as $cpuFilePath) {
-//                 $command = self::RRDTOOL_EXECUTABLE
-//                           . " fetch \"$cpuFilePath\" AVERAGE $resolution $startTime $endTime";
-
-//                 \Log::info("Executing command: " . $command);
-
-//                 $output = shell_exec($command);
-
-//                 if (!empty($output)) {
-//                     $parsedData = $this->parseRrdFetchOutput($output);
-
-//                     foreach ($parsedData as $row) {
-//                         $timestamp = $row['timestamp_unix'];
-
-//                         $usage = $row['usage'] ?? 0.0;
-
-//                         if (!isset($allCpuData[$timestamp])) {
-//                             $allCpuData[$timestamp] = [
-//                                 'timestamp_unix' => $timestamp,
-//                                 'timestamp_formatted' => $row['timestamp_formatted'] ?? date('Y-m-d H:i:s', $timestamp),
-//                                 'total_usage' => 0.0,
-//                                 'count' => 0,
-//                             ];
-//                         }
-
-//                         if (is_numeric($usage) && $usage !== null) {
-//                             $allCpuData[$timestamp]['total_usage'] += (float)$usage;
-//                             $allCpuData[$timestamp]['count']++;
-//                         }
-//                     }
-//                 }
-//             }
-
-//             $aggregatedCpuResults = [];
-//             $maxLoadPeak = 0.0;
-//             $maxLoadTime = null;
-
-//             foreach ($allCpuData as $data) {
-//                 if ($data['count'] > 0) {
-//                     $averageCpuPercent = round($data['total_usage'] / $data['count'], 2);
-
-//                     $aggregatedCpuResults[] = [
-//                         'timestamp_unix' => $data['timestamp_unix'],
-//                         'timestamp_formatted' => $data['timestamp_formatted'],
-//                         'average_cpu_percent' => $averageCpuPercent,
-//                     ];
-
-//                     if ($averageCpuPercent > $maxLoadPeak) {
-//                         $maxLoadPeak = $averageCpuPercent;
-//                         $maxLoadTime = $data['timestamp_formatted'];
-//                     }
-//                 }
-//             }
-
-//             $allAverages = array_column($aggregatedCpuResults, 'average_cpu_percent');
-
-//             $summary = [
-//                 'processor_count' => $numProcessors,
-//                 'average_load_overall' => !empty($allAverages) ? round(array_sum($allAverages) / count($allAverages), 2) : 0.0,
-//                 'max_load_peak' => $maxLoadPeak,
-//                 'max_load_peak_time' => $maxLoadTime,
-//             ];
-
-//             // Store results for this host in the original format
-//             $allHostsData[$host_ip] = [
-//                 'status' => 'success',
-//                 'host_ip' => $host_ip,
-//                 'metric_type' => 'Aggregated_CPU_Usage',
-//                 'requested_range' => [
-//                     'start_datetime' => $startDateString,
-//                     'end_datetime' => $endDateString,
-//                 ],
-//                 'cpu_summary' => $summary,
-//                 'results' => $aggregatedCpuResults,
-//             ];
-
-//             \Log::info("Successfully processed NAS IP: " . $host_ip);
-
-//         } catch (\Exception $e) {
-//             \Log::error("Error processing NAS IP {$host_ip}: " . $e->getMessage());
-//             \Log::error("File: " . $e->getFile() . " Line: " . $e->getLine());
-
-//             $allHostsData[$host_ip] = [
-//                 'status' => 'error',
-//                 'message' => 'Error processing this host: ' . $e->getMessage(),
-//                 'error_line' => $e->getLine()
-//             ];
-//             continue;
-//         }
-//     }
-
-//     // Return all hosts data
-//     return response()->json([
-//         'status' => 'success',
-//         'total_hosts_processed' => count($allHostsData),
-//         'hosts_data' => $allHostsData,
-//     ]);
-// }
-
-
-
-    // public function getMempoolPerformanceData(string $startDateString = null, string $endDateString = null): JsonResponse
+    // public function getMempoolPerformanceData(): JsonResponse
     // {
-    //     // --- 1. Configuration & Path Setup ---
-    //     // Note: The RRD file path is based on the provided RRDtool command.
-    //     $rrdFileBaseDir = '/var/www/html/nttn-monitoring-application/partner-backend/storage/rrd/rrd/172.24.6.16/';
-    //     $rrdFileName = 'mempool-hrstorage-system-65536.rrd';
-    //     $defaultHostIp = '172.24.6.16';
-    //     $rrdFilePath = $rrdFileBaseDir . $rrdFileName;
+    //     $timezone = 'Asia/Dhaka'; // GMT+6
+    //     $resolution = '-r 300';   // 5 min interval
+    //     $rrdFileBaseDir = '/var/www/html/nttn-monitoring-application/partner-backend/storage/rrd/rrd/';
 
-    //     // DSNs required: used and free for total/percent calculation
-    //     $dsnList = 'used free';
-    //     $resolution = '-r 300'; // Standard 5-minute resolution (default for this type of graph)
+    //     // --- 1. Fetch NAS IPs ---
+    //     $nasIps = DB::connection('pgsql')
+    //         ->table('partner_activation_plans')
+    //         ->pluck('nas_ip', 'id') // key = activation_plan_id
+    //         ->filter()
+    //         ->unique();
 
-    //     // --- 2. Time Range Calculation (Using requested range from RRD image, converted to UTC) ---
-    //     // Example range from the image: 2025-10-01 02:05 to 2025-10-02 01:05 (Adjusted for a typical 24h view)
-    //     $startDateString = $startDateString ?? '2025-10-01 01:05:00';
-    //     $endDateString   = $endDateString ?? '2025-10-02 01:05:00';
-
-    //     // LibreNMS typically runs on UTC, but the user's input might be local (GMT+6)
-    //     // We will assume the input strings are intended as GMT+6, but the timestamps used by RRDTool must be UTC.
-    //     $localTimezone = new DateTimeZone('Asia/Dhaka');
-    //     $utcTimezone = new DateTimeZone('UTC');
-
-    //     try {
-    //         $startDateTime = new DateTime($startDateString, $localTimezone);
-    //         $endDateTime   = new DateTime($endDateString, $localTimezone);
-    //     } catch (\Exception $e) {
-    //         return response()->json(['status' => 'error', 'message' => 'Invalid datetime format.'], 400);
+    //     if ($nasIps->isEmpty()) {
+    //         return response()->json(['status' => 'error', 'message' => 'No NAS IPs found.'], 404);
     //     }
 
-    //     // Convert to UTC/GMT+0 for RRDtool
-    //     $startDateTime->setTimezone($utcTimezone);
-    //     $endDateTime->setTimezone($utcTimezone);
+    //     $hostsData = [];
 
-    //     $startUnix = $startDateTime->getTimestamp();
-    //     $endUnix = $endDateTime->getTimestamp();
+    //     foreach ($nasIps as $activationPlanId => $host_ip) {
+    //         $host_ip = trim($host_ip);
+    //         if (empty($host_ip)) continue;
 
+    //         // --- 2. Get latest RAM usage collected_at ---
+    //         $latestCreatedAt = DB::connection('pgsql')
+    //             ->table('nas_ram_usages as c')
+    //             ->join('partner_activation_plans as p', 'c.activation_plan_id', '=', 'p.id')
+    //             ->where('p.nas_ip', $host_ip)
+    //             ->max('c.created_at');
 
-    //     if ($startUnix === false || $endUnix === false || $startUnix >= $endUnix) {
-    //         return response()->json(['status' => 'error', 'message' => 'Invalid datetime range.'], 400);
+    //         // --- 3. Set start and end times ---
+    //         if ($latestCreatedAt) {
+    //             $startDate = Carbon::parse($latestCreatedAt, $timezone)->addSecond();
+    //         } else {
+    //             $startDate = Carbon::now($timezone)->subMinutes(30); // last 30 minutes if no record
+    //         }
+    //         $endDate = Carbon::now($timezone);
+
+    //         $startDateString = $startDate->format('Y-m-d H:i:s');
+    //         $endDateString = $endDate->format('Y-m-d H:i:s');
+
+    //         if ($startDate->gte($endDate)) {
+    //             $hostsData[$host_ip] = [
+    //                 'status' => 'info',
+    //                 'message' => "No new memory data to process for host $host_ip. Last collected at: $latestCreatedAt",
+    //                 'last_collected_at' => $latestCreatedAt,
+    //             ];
+    //             continue;
+    //         }
+
+    //         // --- 4. Convert to UNIX timestamps for RRDTool (UTC) ---
+    //         $startUnix = $startDate->copy()->setTimezone('UTC')->timestamp;
+    //         $endUnix   = $endDate->copy()->setTimezone('UTC')->timestamp;
+    //         $startTime = '-s ' . $startUnix;
+    //         $endTime   = '-e ' . $endUnix;
+
+    //         // --- 5. Prepare RRD file ---
+    //         $rrdFilePath = $rrdFileBaseDir . $host_ip . '/mempool-hrstorage-system-65536.rrd';
+
+    //         if (!is_file($rrdFilePath)) {
+    //             $hostsData[$host_ip] = [
+    //                 'status' => 'error',
+    //                 'message' => "RRD file not found for $host_ip",
+    //             ];
+    //             continue;
+    //         }
+
+    //         // --- 6. Fetch RRD Data ---
+    //         $command = self::RRDTOOL_EXECUTABLE . " fetch \"$rrdFilePath\" AVERAGE $resolution $startTime $endTime used free";
+    //         $output = shell_exec($command);
+
+    //         if (!$output || trim($output) === '') {
+    //             $hostsData[$host_ip] = [
+    //                 'status' => 'error',
+    //                 'message' => "Failed to fetch memory data for $host_ip",
+    //             ];
+    //             continue;
+    //         }
+
+    //         $parsedData = $this->parseRrdFetchOutput($output);
+
+    //         if (empty($parsedData)) {
+    //             $hostsData[$host_ip] = [
+    //                 'status' => 'error',
+    //                 'message' => "No memory data found for $host_ip",
+    //             ];
+    //             continue;
+    //         }
+
+    //         // --- 7. Process Summary ---
+    //         $summary = $this->calculateMemorySummary($parsedData);
+
+    //         $maxMemoryPercent = $summary['used_percent_summary']['max'];
+    //         $maxTimestamp = $summary['max_percent_timestamp'];
+
+    //         if ($maxMemoryPercent && $maxTimestamp) {
+    //             NasRamUsage::on('pgsql')->create([
+    //                 'activation_plan_id' => $activationPlanId,
+    //                 'max_memory_load'    => $maxMemoryPercent,
+    //                 'collected_at'       => Carbon::createFromTimestamp($maxTimestamp, $timezone)->format('Y-m-d H:i:s'),
+    //             ]);
+    //         }
+
+    //         $hostsData[$host_ip] = [
+    //             'status' => 'success',
+    //             'metric_type' => 'Mempool Usage',
+    //             'device_ip' => $host_ip,
+    //             'rrd_file_used' => $rrdFilePath,
+    //             'requested_range' => [
+    //                 'start_datetime' => $startDateString,
+    //                 'end_datetime'   => $endDateString,
+    //             ],
+    //             'mempool_summary' => [
+    //                 'main_memory' => [
+    //                     'percent' => [
+    //                         'Min' => $summary['used_percent_summary']['min'] . '%',
+    //                         'Max' => $summary['used_percent_summary']['max'] . '%',
+    //                         'Cur' => $summary['used_percent_summary']['cur'] . '%',
+    //                         'max_timestamp' => $maxTimestamp ? Carbon::createFromTimestamp($maxTimestamp, $timezone)->format('Y-m-d H:i:s') : null,
+    //                         'max_timestamp_unix' => $maxTimestamp,
+    //                     ],
+    //                     'current_value' => $this->formatBytesForSiB($summary['used_bytes_cur_raw']),
+    //                 ],
+    //                 'Total' => $this->formatBytesForSiB($summary['total_bytes_raw']),
+    //                 'raw_data' => [
+    //                     'used_bytes_cur' => $summary['used_bytes_cur_raw'],
+    //                     'total_bytes'    => $summary['total_bytes_raw'],
+    //                 ]
+    //             ],
+    //             'time_series_raw' => $parsedData,
+    //         ];
     //     }
-
-    //     $startTime = '-s ' . $startUnix;
-    //     $endTime = '-e ' . $endUnix;
-
-    //     // --- 3. RRDtool Command Execution (Fetch used and free memory) ---
-    //     $command = self::RRDTOOL_EXECUTABLE
-    //                     . " fetch \"$rrdFilePath\" AVERAGE $resolution $startTime $endTime $dsnList";
-
-    //     $output = shell_exec($command);
-
-    //     if ($output === null || trim($output) === '') {
-    //         return response()->json(['status' => 'error', 'message' => "Failed to fetch memory data."], 500);
-    //     }
-
-    //     // Assuming this method converts the RRD fetch output to an array:
-    //     // [['timestamp_unix' => 1700000000, 'used' => 1000, 'free' => 9000], ...]
-    //     $parsedDataMain = $this->parseRrdFetchOutput($output);
-
-    //     // --- 4. Data Processing and Summary Calculation ---
-    //     $summary = $this->calculateMemorySummary($parsedDataMain);
-
-
-    //     $formattedUsed = $this->formatBytesForSiB($summary['used_bytes_cur_raw']);
-    //     $formattedTotal = $this->formatBytesForSiB($summary['total_bytes_raw']);
-
-    //     // Format the percent summary to match the structure in the image (Min, Max, Cur)
-    //     $percentOutput = [
-    //         'Min' => $summary['used_percent_summary']['min'] . '%',
-    //         'Max' => $summary['used_percent_summary']['max'] . '%',
-    //         'Cur' => $summary['used_percent_summary']['cur'] . '%',
-    //     ];
 
     //     return response()->json([
     //         'status' => 'success',
-    //         'metric_type' => 'Mempool Usage',
-    //         'device_ip' => $defaultHostIp,
-    //         'rrd_file_used' => $rrdFilePath,
-    //         'requested_range' => [
-    //             'start_datetime' => $startDateString,
-    //             'end_datetime' => $endDateString,
-    //         ],
-    //         'mempool_summary' => [
-    //             'main_memory' => [
-    //                 'percent' => [
-    //                     'Min' => $summary['used_percent_summary']['min'] . '%',
-    //                     'Max' => $summary['used_percent_summary']['max'] . '%',
-    //                     'Cur' => $summary['used_percent_summary']['cur'] . '%',
-    //                     'max_timestamp' => $summary['max_percent_timestamp'] ?
-    //                         date('Y-m-d H:i:s', $summary['max_percent_timestamp']) : null,
-    //                     'max_timestamp_unix' => $summary['max_percent_timestamp'],
-    //                 ],
-    //                 'current_value' => $formattedUsed,
-    //             ],
-    //             'Total' => $formattedTotal,
-    //             // Include raw bytes for client-side processing if needed
-    //             'raw_data' => [
-    //                 'used_bytes_cur' => $summary['used_bytes_cur_raw'],
-    //                 'total_bytes' => $summary['total_bytes_raw'],
-    //             ]
-    //         ],
-    //         'time_series_raw' => $parsedDataMain,
+    //         'hosts' => $hostsData,
     //     ]);
-
     // }
 
-    public function getMempoolPerformanceData15Min(string $startDateString = null, string $endDateString = null): JsonResponse
-    {
-        $rrdFileBaseDir = '/var/www/html/nttn-monitoring-application/partner-backend/storage/rrd/rrd/';
-        $rrdFileName = 'mempool-hrstorage-system-65536.rrd';
-        $resolution = '-r 300';
 
-        // --- 1. Set time range (default last 15 minutes if none provided) ---
-        $endDateTime = new \DateTime($endDateString ?? 'now', new \DateTimeZone('Asia/Dhaka'));
-        $startDateTime = new \DateTime($startDateString ?? '-15 minutes', new \DateTimeZone('Asia/Dhaka'));
+    // librenms
 
-
-
-        $utcTimezone = new \DateTimeZone('UTC');
-        $startDateTime->setTimezone($utcTimezone);
-        $endDateTime->setTimezone($utcTimezone);
-
-        $startUnix = $startDateTime->getTimestamp();
-        $endUnix = $endDateTime->getTimestamp();
-
-        if ($startUnix >= $endUnix) {
-            return response()->json([
-                'status' => 'error',
-                'message' => 'Invalid datetime range.'
-            ], 400);
-        }
-
-        $startTime = '-s ' . $startUnix;
-        $endTime = '-e ' . $endUnix;
-
-        // --- 2. Fetch NAS IPs dynamically from remote PostgreSQL ---
-        $nasIps = DB::connection('pgsql')
-            ->table('partner_activation_plans')
-            ->pluck('nas_ip', 'id') // key = activation_plan_id
-            ->filter()
-            ->unique();
-
-        if ($nasIps->isEmpty()) {
-            return response()->json([
-                'status' => 'error',
-                'message' => 'No NAS IPs found in the database.'
-            ], 404);
-        }
-
-        $hostsData = [];
-
-        foreach ($nasIps as $activationPlanId => $host_ip) {
-            $rrdFilePath = $rrdFileBaseDir . $host_ip . '/' . $rrdFileName;
-
-            if (!is_file($rrdFilePath)) {
-                $hostsData[$host_ip] = [
-                    'status' => 'error',
-                    'message' => "RRD file for host $host_ip not found."
-                ];
-                continue;
-            }
-
-            // --- 3. Execute RRDtool fetch ---
-            $command = self::RRDTOOL_EXECUTABLE . " fetch \"$rrdFilePath\" AVERAGE $resolution used free";
-            $output = shell_exec($command);
-
-            if (empty($output)) {
-                $hostsData[$host_ip] = [
-                    'status' => 'error',
-                    'message' => "Failed to fetch memory data for $host_ip."
-                ];
-                continue;
-            }
-
-            $parsedData = $this->parseRrdFetchOutput($output);
-
-            // --- 4. Calculate summary ---
-            $summary = $this->calculateMemorySummary($parsedData);
-
-            $maxMemoryPercent = $summary['used_percent_summary']['max'];
-            $maxMemoryTimestamp = $summary['max_percent_timestamp'];
-
-            // --- 5. Insert into remote DB ---
-            if ($maxMemoryPercent > 0 && $maxMemoryTimestamp) {
-                NasRamUsage::on('pgsql')->create([
-                    'activation_plan_id' => $activationPlanId,
-                    'max_memory_load' => $maxMemoryPercent,
-                    'collected_at' => date('Y-m-d H:i:s', $maxMemoryTimestamp),
-                ]);
-            }
-
-            // --- 6. Store host-wise JSON response ---
-            $hostsData[$host_ip] = [
-                'status' => 'success',
-                'metric_type' => 'Mempool Usage',
-                'device_ip' => $host_ip,
-                'rrd_file_used' => $rrdFilePath,
-                'requested_range' => [
-                    'start_datetime' => $startDateTime->format('Y-m-d H:i:s'),
-                    'end_datetime' => $endDateTime->format('Y-m-d H:i:s'),
-                ],
-                'mempool_summary' => [
-                    'main_memory' => [
-                        'percent' => [
-                            'Min' => $summary['used_percent_summary']['min'] . '%',
-                            'Max' => $summary['used_percent_summary']['max'] . '%',
-                            'Cur' => $summary['used_percent_summary']['cur'] . '%',
-                            'max_timestamp' => $maxMemoryTimestamp ? date('Y-m-d H:i:s', $maxMemoryTimestamp) : null,
-                            'max_timestamp_unix' => $maxMemoryTimestamp,
-                        ],
-                        'current_value' => $this->formatBytesForSiB($summary['used_bytes_cur_raw']),
-                    ],
-                    'Total' => $this->formatBytesForSiB($summary['total_bytes_raw']),
-                    'raw_data' => [
-                        'used_bytes_cur' => $summary['used_bytes_cur_raw'],
-                        'total_bytes' => $summary['total_bytes_raw'],
-                    ]
-                ],
-                'time_series_raw' => $parsedData,
-            ];
-        }
-
-        return response()->json([
-            'status' => 'success',
-            'hosts' => $hostsData,
-        ]);
-    }
-
-//    public function getMempoolPerformanceData(string $startDateString = null, string $endDateString = null): JsonResponse
-//    {
-//        // --- 1. Time Range Setup ---
-//        $startDateString = $startDateString ?? '2025-10-01 01:05:00';
-//        $endDateString   = $endDateString ?? '2025-10-02 01:05:00';
-//
-//        $localTimezone = new \DateTimeZone('Asia/Dhaka');
-//        $utcTimezone   = new \DateTimeZone('UTC');
-//
-//        try {
-//            $startDateTime = new \DateTime($startDateString, $localTimezone);
-//            $endDateTime   = new \DateTime($endDateString, $localTimezone);
-//        } catch (\Exception $e) {
-//            return response()->json(['status' => 'error', 'message' => 'Invalid datetime format.'], 400);
-//        }
-//
-//        // Convert to UTC for RRDtool
-//        $startDateTime->setTimezone($utcTimezone);
-//        $endDateTime->setTimezone($utcTimezone);
-//
-//        $startUnix = $startDateTime->getTimestamp();
-//        $endUnix   = $endDateTime->getTimestamp();
-//
-//        if ($startUnix >= $endUnix) {
-//            return response()->json(['status' => 'error', 'message' => 'Invalid datetime range.'], 400);
-//        }
-//
-//        $startTime = '-s ' . $startUnix;
-//        $endTime   = '-e ' . $endUnix;
-//        $resolution = '-r 300'; // 5 min interval
-//
-//        // --- 2. Fetch NAS IPs ---
-//        $nasIps = DB::connection('pgsql')
-//            ->table('partner_activation_plans')
-//            ->pluck('nas_ip', 'id') // key = activation_plan_id
-//            ->filter()
-//            ->unique();
-//
-//        if ($nasIps->isEmpty()) {
-//            return response()->json(['status' => 'error', 'message' => 'No NAS IPs found.'], 404);
-//        }
-//
-//        $hostsData = [];
-//
-//        foreach ($nasIps as $activationPlanId => $host_ip) {
-//            $rrdFileBaseDir = "/var/www/html/nttn-monitoring-application/partner-backend/storage/rrd/rrd/$host_ip/";
-//            $rrdFileName = 'mempool-hrstorage-system-65536.rrd';
-//            $rrdFilePath = $rrdFileBaseDir . $rrdFileName;
-//
-//            if (!is_file($rrdFilePath)) {
-//                $hostsData[$host_ip] = [
-//                    'status' => 'error',
-//                    'message' => "RRD file not found for $host_ip",
-//                ];
-//                continue;
-//            }
-//
-//            // --- 3. Fetch RRD Data ---
-//            $command = self::RRDTOOL_EXECUTABLE . " fetch \"$rrdFilePath\" AVERAGE $resolution $startTime $endTime used free";
-//            $output = shell_exec($command);
-//
-//            if (!$output || trim($output) === '') {
-//                $hostsData[$host_ip] = [
-//                    'status' => 'error',
-//                    'message' => "Failed to fetch memory data for $host_ip",
-//                ];
-//                continue;
-//            }
-//
-//            $parsedData = $this->parseRrdFetchOutput($output);
-//
-//            if (empty($parsedData)) {
-//                $hostsData[$host_ip] = [
-//                    'status' => 'error',
-//                    'message' => "No memory data found for $host_ip",
-//                ];
-//                continue;
-//            }
-//
-//            // --- 4. Process Summary ---
-//            $summary = $this->calculateMemorySummary($parsedData);
-//
-//            $maxMemoryPercent = $summary['used_percent_summary']['max'];
-//            $maxTimestamp     = $summary['max_percent_timestamp'];
-//
-//            // Insert into nas_ram_usages on pgsql
-//            if ($maxMemoryPercent && $maxTimestamp) {
-//                NasRamUsage::on('pgsql')->create([
-//                    'activation_plan_id' => $activationPlanId,
-//                    'max_memory_load'    => $maxMemoryPercent,
-//                    'collected_at'       => date('Y-m-d H:i:s', $maxTimestamp),
-//                ]);
-//            }
-//
-//            // --- 5. Store results per host ---
-//            $hostsData[$host_ip] = [
-//                'status' => 'success',
-//                'metric_type' => 'Mempool Usage',
-//                'device_ip' => $host_ip,
-//                'rrd_file_used' => $rrdFilePath,
-//                'requested_range' => [
-//                    'start_datetime' => $startDateString,
-//                    'end_datetime'   => $endDateString,
-//                ],
-//                'mempool_summary' => [
-//                    'main_memory' => [
-//                        'percent' => [
-//                            'Min' => $summary['used_percent_summary']['min'] . '%',
-//                            'Max' => $summary['used_percent_summary']['max'] . '%',
-//                            'Cur' => $summary['used_percent_summary']['cur'] . '%',
-//                            'max_timestamp' => $maxTimestamp ? date('Y-m-d H:i:s', $maxTimestamp) : null,
-//                            'max_timestamp_unix' => $maxTimestamp,
-//                        ],
-//                        'current_value' => $this->formatBytesForSiB($summary['used_bytes_cur_raw']),
-//                    ],
-//                    'Total' => $this->formatBytesForSiB($summary['total_bytes_raw']),
-//                    'raw_data' => [
-//                        'used_bytes_cur' => $summary['used_bytes_cur_raw'],
-//                        'total_bytes'    => $summary['total_bytes_raw'],
-//                    ]
-//                ],
-//                'time_series_raw' => $parsedData,
-//            ];
-//        }
-//
-//        return response()->json([
-//            'status' => 'success',
-//            'hosts' => $hostsData,
-//        ]);
-//    }.
 
     public function getMempoolPerformanceData(): JsonResponse
     {
+        $remoteRrdBaseDir = '/opt/librenms/rrd/';
+        $remoteHost = '172.17.18.82';
+        $remotePort = 65122;
+        $remoteUser = 'linkmon';
+        $remotePass = '!TB5731roL#';
         $timezone = 'Asia/Dhaka'; // GMT+6
         $resolution = '-r 300';   // 5 min interval
-        $rrdFileBaseDir = '/var/www/html/nttn-monitoring-application/partner-backend/storage/rrd/rrd/';
 
-        // --- 1. Fetch NAS IPs ---
+        // Fetch NAS IPs dynamically from remote PostgreSQL
         $nasIps = DB::connection('pgsql')
             ->table('partner_activation_plans')
             ->pluck('nas_ip', 'id') // key = activation_plan_id
@@ -1404,6 +1511,15 @@ class RrdController extends Controller
 
         if ($nasIps->isEmpty()) {
             return response()->json(['status' => 'error', 'message' => 'No NAS IPs found.'], 404);
+        }
+
+        // --- Initialize SFTP connection ---
+        $sftp = new SFTP($remoteHost, $remotePort);
+        if (!$sftp->login($remoteUser, $remotePass)) {
+            return response()->json([
+                'status' => 'error',
+                'message' => 'Failed to connect to remote RRD host via SFTP.'
+            ], 500);
         }
 
         $hostsData = [];
@@ -1423,7 +1539,7 @@ class RrdController extends Controller
             if ($latestCreatedAt) {
                 $startDate = Carbon::parse($latestCreatedAt, $timezone)->addSecond();
             } else {
-                $startDate = Carbon::now($timezone)->subMinutes(30); // last 30 minutes if no record
+                $startDate = Carbon::now($timezone)->subMinutes(30);
             }
             $endDate = Carbon::now($timezone);
 
@@ -1439,26 +1555,38 @@ class RrdController extends Controller
                 continue;
             }
 
-            // --- 4. Convert to UNIX timestamps for RRDTool (UTC) ---
-            $startUnix = $startDate->copy()->setTimezone('UTC')->timestamp;
-            $endUnix   = $endDate->copy()->setTimezone('UTC')->timestamp;
+            $startUnix = $startDate->timestamp;
+            $endUnix = $endDate->timestamp;
             $startTime = '-s ' . $startUnix;
             $endTime   = '-e ' . $endUnix;
 
-            // --- 5. Prepare RRD file ---
-            $rrdFilePath = $rrdFileBaseDir . $host_ip . '/mempool-hrstorage-system-65536.rrd';
+            $mempoolRrdDirectory = rtrim($remoteRrdBaseDir, '/') . '/' . $host_ip;
 
-            if (!is_file($rrdFilePath)) {
+            // --- Check remote directory existence ---
+            $remoteDirListing = $sftp->nlist($mempoolRrdDirectory);
+            if ($remoteDirListing === false) {
                 $hostsData[$host_ip] = [
                     'status' => 'error',
-                    'message' => "RRD file not found for $host_ip",
+                    'message' => "RRD directory for host $host_ip not found. Checked: '$mempoolRrdDirectory'"
                 ];
                 continue;
             }
 
-            // --- 6. Fetch RRD Data ---
+            // --- Filter mempool RRD file ---
+            $rrdFileName = 'mempool-hrstorage-system-65536.rrd';
+            if (!in_array($rrdFileName, $remoteDirListing)) {
+                $hostsData[$host_ip] = [
+                    'status' => 'error',
+                    'message' => "RRD file '$rrdFileName' not found for host $host_ip."
+                ];
+                continue;
+            }
+
+            $rrdFilePath = $mempoolRrdDirectory . '/' . $rrdFileName;
+
+            // --- Fetch RRD Data via SSH ---
             $command = self::RRDTOOL_EXECUTABLE . " fetch \"$rrdFilePath\" AVERAGE $resolution $startTime $endTime used free";
-            $output = shell_exec($command);
+            $output = $sftp->exec($command);
 
             if (!$output || trim($output) === '') {
                 $hostsData[$host_ip] = [
@@ -1527,7 +1655,6 @@ class RrdController extends Controller
             'hosts' => $hostsData,
         ]);
     }
-
 
 
 
@@ -1620,243 +1747,163 @@ class RrdController extends Controller
     }
 
 
+    // from 220
 
-
-    // public function getSystemDiskStorageData(string $startDateString = null, string $endDateString = null): JsonResponse
+    // public function getSystemDiskStorageData(): JsonResponse
     // {
-    //     // --- 1. Configuration & Path Setup ---
-    //     // RRD file path from the command:
-    //     $rrdFileBaseDir = '/var/www/html/nttn-monitoring-application/partner-backend/storage/rrd/rrd/172.24.6.16/';
-    //     $rrdFileName = 'storage-hrstorage-system_disk.rrd';
-    //     $defaultHostIp = '172.24.6.16';
-    //     $rrdFilePath = $rrdFileBaseDir . $rrdFileName;
+    //     $timezone = 'Asia/Dhaka'; // GMT+6
+    //     $resolution = '-r 3600'; // 1-hour interval
+    //     $rrdFileBaseDir = '/var/www/html/nttn-monitoring-application/partner-backend/storage/rrd/rrd/';
 
-    //     // DSNs required: used and free
-    //     $dsnList = 'used free';
-    //     $resolution = '-r 3600'; // 1-hour resolution is often used for long-term storage data (3600s/1hr step)
+    //     // --- 1. Fetch NAS IPs ---
+    //     $nasIps = DB::connection('pgsql')
+    //         ->table('partner_activation_plans')
+    //         ->pluck('nas_ip', 'id')
+    //         ->filter()
+    //         ->unique();
 
-    //     // --- 2. Time Range Calculation (GMT+6 to UTC conversion) ---
-    //     // Example range from the image: 2025-10-15 11:50 to 2025-10-16 11:50 (GMT+6)
-    //     $startDateString = $startDateString ?? '2025-10-15 11:50:00';
-    //     $endDateString   = $endDateString ?? '2025-10-16 11:50:00';
-
-    //     $localTimezone = new DateTimeZone('Asia/Dhaka');
-    //     $utcTimezone = new DateTimeZone('UTC');
-
-    //     try {
-    //         $startDateTime = new DateTime($startDateString, $localTimezone);
-    //         $endDateTime   = new DateTime($endDateString, $localTimezone);
-    //     } catch (\Exception $e) {
-    //         return response()->json(['status' => 'error', 'message' => 'Invalid datetime format.'], 400);
+    //     if ($nasIps->isEmpty()) {
+    //         return response()->json(['status' => 'error', 'message' => 'No NAS IPs found.'], 404);
     //     }
 
-    //     // Convert to UTC/GMT+0 for RRDtool
-    //     $startDateTime->setTimezone($utcTimezone);
-    //     $endDateTime->setTimezone($utcTimezone);
+    //     $hostsData = [];
 
-    //     $startUnix = $startDateTime->getTimestamp();
-    //     $endUnix = $endDateTime->getTimestamp();
+    //     foreach ($nasIps as $activationPlanId => $host_ip) {
+    //         $host_ip = trim($host_ip);
+    //         if (empty($host_ip)) continue;
 
+    //         // --- 2. Get latest disk usage collected_at ---
+    //         $latestCreatedAt = DB::connection('pgsql')
+    //             ->table('nas_disk_usages as c')
+    //             ->join('partner_activation_plans as p', 'c.activation_plan_id', '=', 'p.id')
+    //             ->where('p.nas_ip', $host_ip)
+    //             ->max('c.created_at');
 
-    //     if ($startUnix === false || $endUnix === false || $startUnix >= $endUnix) {
-    //         return response()->json(['status' => 'error', 'message' => 'Invalid datetime range.'], 400);
+    //         // --- 3. Set start and end times ---
+    //         if ($latestCreatedAt) {
+    //             $startDate = Carbon::parse($latestCreatedAt, $timezone)->addSecond();
+    //         } else {
+    //             $startDate = Carbon::now($timezone)->subMinutes(30); // last 30 minutes if no record
+    //         }
+    //         $endDate = Carbon::now($timezone);
+
+    //         $startDateString = $startDate->format('Y-m-d H:i:s');
+    //         $endDateString   = $endDate->format('Y-m-d H:i:s');
+
+    //         if ($startDate->gte($endDate)) {
+    //             $hostsData[$host_ip] = [
+    //                 'status' => 'info',
+    //                 'message' => "No new disk data to process for host $host_ip. Last collected at: $latestCreatedAt",
+    //                 'last_collected_at' => $latestCreatedAt,
+    //             ];
+    //             continue;
+    //         }
+
+    //         // --- 4. Convert to UNIX timestamps for RRDTool (UTC) ---
+    //         $startUnix = $startDate->copy()->setTimezone('UTC')->timestamp;
+    //         $endUnix   = $endDate->copy()->setTimezone('UTC')->timestamp;
+    //         $startTime = '-s ' . $startUnix;
+    //         $endTime   = '-e ' . $endUnix;
+
+    //         // --- 5. Prepare RRD file ---
+    //         $rrdFilePath = $rrdFileBaseDir . $host_ip . '/storage-hrstorage-system_disk.rrd';
+
+    //         if (!is_file($rrdFilePath)) {
+    //             $hostsData[$host_ip] = [
+    //                 'status' => 'error',
+    //                 'message' => "RRD file not found for $host_ip",
+    //             ];
+    //             continue;
+    //         }
+
+    //         // --- 6. Fetch RRD Data ---
+    //         $command = self::RRDTOOL_EXECUTABLE . " fetch \"$rrdFilePath\" AVERAGE $resolution $startTime $endTime used free";
+    //         $output = shell_exec($command);
+
+    //         if (!$output || trim($output) === '') {
+    //             $hostsData[$host_ip] = [
+    //                 'status' => 'error',
+    //                 'message' => "Failed to fetch disk storage data for $host_ip",
+    //             ];
+    //             continue;
+    //         }
+
+    //         $parsedData = $this->parseRrdFetchOutput($output);
+
+    //         if (empty($parsedData)) {
+    //             $hostsData[$host_ip] = [
+    //                 'status' => 'error',
+    //                 'message' => "No disk storage data found for $host_ip",
+    //             ];
+    //             continue;
+    //         }
+
+    //         // --- 7. Calculate summary ---
+    //         $summary = $this->calculateStorageSummary($parsedData);
+
+    //         $diskSizeBytes = (int)$summary['total_size_raw'];
+    //         $diskUsedBytes = (int)$summary['max_used_value'];
+    //         $maxTimestamp  = $summary['max_used_timestamp'];
+
+    //         // Insert into nas_disk_usages table
+    //         if ($diskUsedBytes && $maxTimestamp) {
+    //             NasDiskUsage::on('pgsql')->create([
+    //                 'activation_plan_id' => $activationPlanId,
+    //                 'disk_size'          => $diskSizeBytes,
+    //                 'disk_used'          => $diskUsedBytes,
+    //                 'collected_at'       => Carbon::createFromTimestamp($maxTimestamp, $timezone)->format('Y-m-d H:i:s'),
+    //             ]);
+    //         }
+
+    //         // --- 8. Store host-wise results ---
+    //         $hostsData[$host_ip] = [
+    //             'status' => 'success',
+    //             'metric_type' => 'System Disk Storage',
+    //             'device_ip' => $host_ip,
+    //             'rrd_file_used' => $rrdFilePath,
+    //             'requested_range' => [
+    //                 'start_datetime' => $startDateString,
+    //                 'end_datetime'   => $endDateString,
+    //             ],
+    //             'storage_summary' => [
+    //                 'disk_name' => 'system disk',
+    //                 'Size' => $this->formatBytesForSiB($diskSizeBytes),
+    //                 'Used' => [
+    //                     'current_value' => $this->formatBytesForSiB($summary['used_raw']),
+    //                     'max_value' => $this->formatBytesForSiB($diskUsedBytes),
+    //                     'max_timestamp' => $maxTimestamp ? Carbon::createFromTimestamp($maxTimestamp, $timezone)->format('Y-m-d H:i:s') : null,
+    //                     'max_timestamp_unix' => $maxTimestamp,
+    //                 ],
+    //                 'Percent_Used' => [
+    //                     'current' => round($summary['percent_used_raw'], 2) . '%',
+    //                     'max' => round($summary['max_percent_used'], 2) . '%',
+    //                     'max_timestamp' => $maxTimestamp ? Carbon::createFromTimestamp($maxTimestamp, $timezone)->format('Y-m-d H:i:s') : null,
+    //                 ],
+    //                 'raw_data' => $summary,
+    //             ],
+    //             'time_series_raw' => $parsedData,
+    //         ];
     //     }
 
-    //     $startTime = '-s ' . $startUnix;
-    //     $endTime = '-e ' . $endUnix;
-
-    //     // --- 3. RRDtool Command Execution (Fetch used and free storage space) ---
-    //     $command = self::RRDTOOL_EXECUTABLE
-    //                     . " fetch \"$rrdFilePath\" AVERAGE $resolution $startTime $endTime $dsnList";
-
-    //     $output = shell_exec($command);
-
-    //     if ($output === null || trim($output) === '') {
-    //         return response()->json(['status' => 'error', 'message' => "Failed to fetch storage data."], 500);
-    //     }
-
-    //     $parsedDataMain = $this->parseRrdFetchOutput($output);
-
-    //     // --- 4. Data Processing and Summary Calculation ---
-    //     $summary = $this->calculateStorageSummary($parsedDataMain);
-
-    //     // Format raw bytes (Size and Used) to match the graph legend (e.g., 1.87GB, 176.99MB)
-    //     $formattedSize = $this->formatBytesForSiB($summary['total_size_raw'], 2);
-    //     $formattedUsed = $this->formatBytesForSiB($summary['used_raw'], 2);
-
-    //     // --- 5. Return Response ---
     //     return response()->json([
     //         'status' => 'success',
-    //         'metric_type' => 'System Disk Storage',
-    //         'device_ip' => $defaultHostIp,
-    //         'rrd_file_used' => $rrdFilePath,
-    //         'requested_range' => [
-    //             'start_datetime' => $startDateString,
-    //             'end_datetime' => $endDateString,
-    //         ],
-    //         'storage_summary' => [
-    //             'disk_name' => 'system disk',
-    //             'Size' => $formattedSize,
-    //             'Used' => [
-    //                 'current_value' => $formattedUsed,
-    //                 'max_value' => $this->formatBytesForSiB($summary['max_used_value'], 2),
-    //                 'max_timestamp' => $summary['max_used_timestamp'] ?
-    //                     date('Y-m-d H:i:s', $summary['max_used_timestamp']) : null,
-    //                 'max_timestamp_unix' => $summary['max_used_timestamp'],
-    //             ],
-    //             'Percent_Used' => [
-    //                 'current' => round($summary['percent_used_raw'], 2) . '%',
-    //                 'max' => round($summary['max_percent_used'], 2) . '%',
-    //                 'max_timestamp' => $summary['max_used_timestamp'] ?
-    //                     date('Y-m-d H:i:s', $summary['max_used_timestamp']) : null,
-    //             ],
-    //             'raw_data' => $summary, // Includes the raw bytes/percent values
-    //         ],
-    //         'time_series_raw' => $parsedDataMain,
+    //         'hosts' => $hostsData,
     //     ]);
     // }
 
-//    public function getSystemDiskStorageData(string $startDateString = null, string $endDateString = null): JsonResponse
-//    {
-//        // --- 1. Time Range Setup ---
-//        $startDateString = $startDateString ?? '2025-10-15 11:50:00';
-//        $endDateString   = $endDateString ?? '2025-10-16 11:50:00';
-//
-//        $localTimezone = new \DateTimeZone('Asia/Dhaka');
-//        $utcTimezone   = new \DateTimeZone('UTC');
-//
-//        try {
-//            $startDateTime = new \DateTime($startDateString, $localTimezone);
-//            $endDateTime   = new \DateTime($endDateString, $localTimezone);
-//        } catch (\Exception $e) {
-//            return response()->json(['status' => 'error', 'message' => 'Invalid datetime format.'], 400);
-//        }
-//
-//        // Convert to UTC for RRDtool
-//        $startDateTime->setTimezone($utcTimezone);
-//        $endDateTime->setTimezone($utcTimezone);
-//
-//        $startUnix = $startDateTime->getTimestamp();
-//        $endUnix   = $endDateTime->getTimestamp();
-//
-//        if ($startUnix >= $endUnix) {
-//            return response()->json(['status' => 'error', 'message' => 'Invalid datetime range.'], 400);
-//        }
-//
-//        $startTime = '-s ' . $startUnix;
-//        $endTime   = '-e ' . $endUnix;
-//        $resolution = '-r 3600'; // 1-hour interval
-//
-//        // --- 2. Fetch NAS IPs ---
-//        $nasIps = DB::connection('pgsql')
-//            ->table('partner_activation_plans')
-//            ->pluck('nas_ip', 'id') // key = activation_plan_id
-//            ->filter()
-//            ->unique();
-//
-//        if ($nasIps->isEmpty()) {
-//            return response()->json(['status' => 'error', 'message' => 'No NAS IPs found.'], 404);
-//        }
-//
-//        $hostsData = [];
-//
-//        foreach ($nasIps as $activationPlanId => $host_ip) {
-//            $rrdFileBaseDir = "/var/www/html/nttn-monitoring-application/partner-backend/storage/rrd/rrd/$host_ip/";
-//            $rrdFileName = 'storage-hrstorage-system_disk.rrd';
-//            $rrdFilePath = $rrdFileBaseDir . $rrdFileName;
-//
-//            if (!is_file($rrdFilePath)) {
-//                $hostsData[$host_ip] = [
-//                    'status' => 'error',
-//                    'message' => "RRD file not found for $host_ip",
-//                ];
-//                continue;
-//            }
-//
-//            // --- 3. Fetch RRD Data ---
-//            $command = self::RRDTOOL_EXECUTABLE . " fetch \"$rrdFilePath\" AVERAGE $resolution $startTime $endTime used free";
-//            $output = shell_exec($command);
-//
-//            if (!$output || trim($output) === '') {
-//                $hostsData[$host_ip] = [
-//                    'status' => 'error',
-//                    'message' => "Failed to fetch disk storage data for $host_ip",
-//                ];
-//                continue;
-//            }
-//
-//            $parsedData = $this->parseRrdFetchOutput($output);
-//
-//            if (empty($parsedData)) {
-//                $hostsData[$host_ip] = [
-//                    'status' => 'error',
-//                    'message' => "No disk storage data found for $host_ip",
-//                ];
-//                continue;
-//            }
-//
-//            // --- 4. Calculate summary ---
-//            $summary = $this->calculateStorageSummary($parsedData);
-//
-//            $diskSizeBytes   = (int)$summary['total_size_raw'];
-//            $diskUsedBytes   = (int)$summary['max_used_value'];
-//            $maxTimestamp    = $summary['max_used_timestamp'];
-//
-//            // Insert into nas_disk_usages table
-//            if ($diskUsedBytes && $maxTimestamp) {
-//                NasDiskUsage::on('pgsql')->create([
-//                    'activation_plan_id' => $activationPlanId,
-//                    'disk_size'          => $diskSizeBytes,
-//                    'disk_used'          => $diskUsedBytes,
-//                    'collected_at'       => date('Y-m-d H:i:s', $maxTimestamp),
-//                ]);
-//            }
-//
-//            // --- 5. Store host-wise results ---
-//            $hostsData[$host_ip] = [
-//                'status' => 'success',
-//                'metric_type' => 'System Disk Storage',
-//                'device_ip' => $host_ip,
-//                'rrd_file_used' => $rrdFilePath,
-//                'requested_range' => [
-//                    'start_datetime' => $startDateString,
-//                    'end_datetime'   => $endDateString,
-//                ],
-//                'storage_summary' => [
-//                    'disk_name' => 'system disk',
-//                    'Size' => $this->formatBytesForSiB($diskSizeBytes),
-//                    'Used' => [
-//                        'current_value' => $this->formatBytesForSiB($summary['used_raw']),
-//                        'max_value' => $this->formatBytesForSiB($diskUsedBytes),
-//                        'max_timestamp' => $maxTimestamp ? date('Y-m-d H:i:s', $maxTimestamp) : null,
-//                        'max_timestamp_unix' => $maxTimestamp,
-//                    ],
-//                    'Percent_Used' => [
-//                        'current' => round($summary['percent_used_raw'], 2) . '%',
-//                        'max' => round($summary['max_percent_used'], 2) . '%',
-//                        'max_timestamp' => $maxTimestamp ? date('Y-m-d H:i:s', $maxTimestamp) : null,
-//                    ],
-//                    'raw_data' => $summary,
-//                ],
-//                'time_series_raw' => $parsedData,
-//            ];
-//        }
-//
-//        return response()->json([
-//            'status' => 'success',
-//            'hosts' => $hostsData,
-//        ]);
-//    }
 
-
-
+    // librenms
 
 
     public function getSystemDiskStorageData(): JsonResponse
     {
+        $remoteRrdBaseDir = '/opt/librenms/rrd/';
+        $remoteHost = '172.17.18.82';
+        $remotePort = 65122;
+        $remoteUser = 'linkmon';
+        $remotePass = '!TB5731roL#';
         $timezone = 'Asia/Dhaka'; // GMT+6
         $resolution = '-r 3600'; // 1-hour interval
-        $rrdFileBaseDir = '/var/www/html/nttn-monitoring-application/partner-backend/storage/rrd/rrd/';
 
         // --- 1. Fetch NAS IPs ---
         $nasIps = DB::connection('pgsql')
@@ -1867,6 +1914,15 @@ class RrdController extends Controller
 
         if ($nasIps->isEmpty()) {
             return response()->json(['status' => 'error', 'message' => 'No NAS IPs found.'], 404);
+        }
+
+        // --- Initialize SFTP connection ---
+        $sftp = new SFTP($remoteHost, $remotePort);
+        if (!$sftp->login($remoteUser, $remotePass)) {
+            return response()->json([
+                'status' => 'error',
+                'message' => 'Failed to connect to remote RRD host via SFTP.'
+            ], 500);
         }
 
         $hostsData = [];
@@ -1886,7 +1942,7 @@ class RrdController extends Controller
             if ($latestCreatedAt) {
                 $startDate = Carbon::parse($latestCreatedAt, $timezone)->addSecond();
             } else {
-                $startDate = Carbon::now($timezone)->subMinutes(30); // last 30 minutes if no record
+                $startDate = Carbon::now($timezone)->subMinutes(30);
             }
             $endDate = Carbon::now($timezone);
 
@@ -1902,26 +1958,38 @@ class RrdController extends Controller
                 continue;
             }
 
-            // --- 4. Convert to UNIX timestamps for RRDTool (UTC) ---
-            $startUnix = $startDate->copy()->setTimezone('UTC')->timestamp;
-            $endUnix   = $endDate->copy()->setTimezone('UTC')->timestamp;
+            $startUnix = $startDate->timestamp;
+            $endUnix   = $endDate->timestamp;
             $startTime = '-s ' . $startUnix;
             $endTime   = '-e ' . $endUnix;
 
-            // --- 5. Prepare RRD file ---
-            $rrdFilePath = $rrdFileBaseDir . $host_ip . '/storage-hrstorage-system_disk.rrd';
+            $diskRrdDirectory = rtrim($remoteRrdBaseDir, '/') . '/' . $host_ip;
 
-            if (!is_file($rrdFilePath)) {
+            // --- Check remote directory existence ---
+            $remoteDirListing = $sftp->nlist($diskRrdDirectory);
+            if ($remoteDirListing === false) {
                 $hostsData[$host_ip] = [
                     'status' => 'error',
-                    'message' => "RRD file not found for $host_ip",
+                    'message' => "RRD directory for host $host_ip not found. Checked: '$diskRrdDirectory'"
                 ];
                 continue;
             }
 
-            // --- 6. Fetch RRD Data ---
+            // --- Filter disk RRD file ---
+            $rrdFileName = 'storage-hrstorage-system_disk.rrd';
+            if (!in_array($rrdFileName, $remoteDirListing)) {
+                $hostsData[$host_ip] = [
+                    'status' => 'error',
+                    'message' => "RRD file '$rrdFileName' not found for host $host_ip."
+                ];
+                continue;
+            }
+
+            $rrdFilePath = $diskRrdDirectory . '/' . $rrdFileName;
+
+            // --- Fetch RRD Data via SSH ---
             $command = self::RRDTOOL_EXECUTABLE . " fetch \"$rrdFilePath\" AVERAGE $resolution $startTime $endTime used free";
-            $output = shell_exec($command);
+            $output = $sftp->exec($command);
 
             if (!$output || trim($output) === '') {
                 $hostsData[$host_ip] = [
@@ -2073,241 +2141,155 @@ class RrdController extends Controller
     }
 
 
+    // from 220
 
-    // public function getIcmpPerformanceData(string $startDateString = null, string $endDateString = null): JsonResponse
+    // public function getIcmpPerformanceData(): JsonResponse
     // {
+    //     // --- 1. Load NAS IPs ---
+    //     $nasIps = DB::connection('pgsql')
+    //         ->table('partner_activation_plans')
+    //         ->pluck('nas_ip', 'id')
+    //         ->filter()
+    //         ->unique();
 
-    //     $rrdFileBaseDir = '/var/www/html/nttn-monitoring-application/partner-backend/storage/rrd/rrd/';
-    //     $rrdFileName = 'icmp-perf.rrd';
-    //     $defaultHostIp = '172.24.6.16';
-    //     $rrdFilePath = $rrdFileBaseDir . $defaultHostIp . '/' . $rrdFileName;
+    //     if ($nasIps->isEmpty()) {
+    //         return response()->json(['status' => 'error', 'message' => 'No NAS IPs found.'], 404);
+    //     }
 
-
-    //     $dsnListFull = 'avg max min xmt rcv';
-    //     $dsnListAvg = 'avg';
+    //     $localTimezone = 'Asia/Dhaka';
+    //     $utcTimezone   = 'UTC';
     //     $fullResolution = '-r 300';
-    //     $hourResolution = '-r 3600'; // 1-hour resolution
+    //     $hourResolution = '-r 3600';
+    //     $dsnListFull = 'avg max min xmt rcv';
+    //     $dsnListAvg  = 'avg';
 
+    //     $results = [];
 
+    //     foreach ($nasIps as $activationPlanId => $nasIp) {
+    //         $nasIp = trim($nasIp);
+    //         if (empty($nasIp)) continue;
 
-    //     $startDateString = $startDateString ?? '2025-10-14 17:25:00';
-    //     $endDateString   = $endDateString ?? '2025-10-15 17:25:00';
+    //         // --- 2. Get latest latency and timeout ---
+    //         $latestLatency = DB::connection('pgsql')
+    //             ->table('nas_icmp_latencies as c')
+    //             ->join('partner_activation_plans as p', 'c.activation_plan_id', '=', 'p.id')
+    //             ->where('p.nas_ip', $nasIp)
+    //             ->max('c.created_at');
 
+    //         $latestTimeout = DB::connection('pgsql')
+    //             ->table('nas_icmp_timeouts as c')
+    //             ->join('partner_activation_plans as p', 'c.activation_plan_id', '=', 'p.id')
+    //             ->where('p.nas_ip', $nasIp)
+    //             ->max('c.created_at');
 
-    //     $localTimezone = new DateTimeZone('Asia/Dhaka');
-    //     $utcTimezone = new DateTimeZone('UTC');
+    //         // --- 3. Determine start and end time ---
+    //         $latestCreatedUnix = max(
+    //             $latestLatency ? strtotime($latestLatency) : 0,
+    //             $latestTimeout ? strtotime($latestTimeout) : 0
+    //         );
 
-    //     try {
+    //         $startDate = $latestCreatedUnix > 0
+    //             ? Carbon::createFromTimestamp($latestCreatedUnix + 1, $localTimezone)
+    //             : Carbon::now($localTimezone)->subMinutes(30);
 
-    //         $startDateTime = new DateTime($startDateString, $localTimezone);
-    //         $endDateTime   = new DateTime($endDateString, $localTimezone);
-    //     } catch (\Exception $e) {
-    //         return response()->json([
-    //             'status' => 'error',
-    //             'message' => 'Invalid datetime format: ' . $e->getMessage()
-    //         ], 400);
+    //         $endDate = Carbon::now($localTimezone);
+
+    //         if ($startDate->gte($endDate)) {
+    //             $results[$nasIp] = [
+    //                 'status' => 'info',
+    //                 'message' => "No new ICMP data to process for host $nasIp",
+    //                 'last_collected_at' => $latestCreatedUnix ? Carbon::createFromTimestamp($latestCreatedUnix, $localTimezone)->format('Y-m-d H:i:s') : null,
+    //             ];
+    //             continue;
+    //         }
+
+    //         // --- 4. Convert to UTC UNIX timestamps for RRD ---
+    //         $startUnix = $startDate->copy()->setTimezone($utcTimezone)->timestamp;
+    //         $endUnix   = $endDate->copy()->setTimezone($utcTimezone)->timestamp;
+    //         $startTime = '-s ' . $startUnix;
+    //         $endTime   = '-e ' . $endUnix;
+
+    //         $rrdFilePath = "/var/www/html/nttn-monitoring-application/partner-backend/storage/rrd/rrd/{$nasIp}/icmp-perf.rrd";
+
+    //         if (!is_file($rrdFilePath)) {
+    //             $results[$nasIp] = [
+    //                 'status' => 'error',
+    //                 'message' => "RRD file not found for $nasIp",
+    //             ];
+    //             continue;
+    //         }
+
+    //         // --- 5. Fetch RRD Data ---
+    //         $outputMain = shell_exec(self::RRDTOOL_EXECUTABLE . " fetch \"$rrdFilePath\" AVERAGE $fullResolution $startTime $endTime $dsnListFull");
+    //         if (!$outputMain || trim($outputMain) === '') continue;
+    //         $parsedDataMain = $this->parseRrdFetchOutput($outputMain);
+
+    //         $parsedDataHourAvg = $this->parseRrdFetchOutput(shell_exec(self::RRDTOOL_EXECUTABLE . " fetch \"$rrdFilePath\" AVERAGE $hourResolution $startTime $endTime $dsnListAvg"));
+    //         $parsedDataHourMin = $this->parseRrdFetchOutput(shell_exec(self::RRDTOOL_EXECUTABLE . " fetch \"$rrdFilePath\" MIN $hourResolution $startTime $endTime $dsnListAvg"));
+    //         $parsedDataHourMax = $this->parseRrdFetchOutput(shell_exec(self::RRDTOOL_EXECUTABLE . " fetch \"$rrdFilePath\" MAX $hourResolution $startTime $endTime $dsnListAvg"));
+
+    //         // --- 6. Calculate summary & outages ---
+    //         $summary = $this->calculateComprehensiveSummary($parsedDataMain, $parsedDataHourAvg, $parsedDataHourMin, $parsedDataHourMax);
+    //         $outageAnalysis = $this->analyzeOutageGaps($parsedDataMain, $endUnix, $localTimezone);
+
+    //         // --- 7. Insert NasIcmpLatency only if value exists ---
+    //         $maxRtt = $summary['rtt_loss_high_res']['rtt_ms'] ?? [];
+    //         if (!empty($maxRtt['max']) && !empty($maxRtt['max_timestamp'])) {
+    //             NasIcmpLatency::on('pgsql')->create([
+    //                 'activation_plan_id' => $activationPlanId,
+    //                 'collected_at' => Carbon::createFromTimestamp($maxRtt['max_timestamp'], $localTimezone)->format('Y-m-d H:i:s'),
+    //                 'threshold_exceeded_value' => $maxRtt['max'],
+    //             ]);
+    //         }
+
+    //         // --- 8. Insert NasIcmpTimeout only if keys exist ---
+    //         if (!empty($outageAnalysis['outage_periods'])) {
+    //             foreach ($outageAnalysis['outage_periods'] as $outage) {
+    //                 if (!isset($outage['start_unix'], $outage['end_unix'], $outage['duration_seconds'])) {
+    //                     continue; // skip invalid/outage with missing keys
+    //                 }
+
+    //                 NasIcmpTimeout::on('pgsql')->create([
+    //                     'activation_plan_id' => $activationPlanId,
+    //                     'timeout_start' => Carbon::createFromTimestamp($outage['start_unix'], $localTimezone)->format('Y-m-d H:i:s'),
+    //                     'timeout_end'   => Carbon::createFromTimestamp($outage['end_unix'], $localTimezone)->format('Y-m-d H:i:s'),
+    //                     'timeout_duration' => $outage['duration_seconds'],
+    //                 ]);
+    //             }
+    //         }
+
+    //         // --- 9. Store results ---
+    //         $results[$nasIp] = [
+    //             'activation_plan_id' => $activationPlanId,
+    //             'icmp_summary' => $summary,
+    //             'outage_analysis' => $outageAnalysis,
+    //             'time_series_raw' => $parsedDataMain,
+    //         ];
     //     }
 
-
-    //     $startDateTime->setTimezone($utcTimezone);
-    //     $endDateTime->setTimezone($utcTimezone);
-
-    //     $startUnix = $startDateTime->getTimestamp();
-    //     $endUnix = $endDateTime->getTimestamp();
-
-
-    //     if ($startUnix === false || $endUnix === false || $startUnix >= $endUnix) {
-    //         return response()->json([
-    //             'status' => 'error',
-    //             'message' => 'Invalid datetime range. Start time must be before end time.'
-    //         ], 400);
-    //     }
-
-    //     $startTime = '-s ' . $startUnix;
-    //     $endTime = '-e ' . $endUnix;
-
-
-
-    //     //  Fetch Main Data (5-min res, all DSNs)
-    //     $commandMain = self::RRDTOOL_EXECUTABLE
-    //                     . " fetch \"$rrdFilePath\" AVERAGE $fullResolution $startTime $endTime $dsnListFull";
-    //     $outputMain = shell_exec($commandMain);
-
-    //     if ($outputMain === null || trim($outputMain) === '') {
-    //         return response()->json(['status' => 'error', 'message' => "Failed to fetch main data."], 500);
-    //     }
-    //     $parsedDataMain = $this->parseRrdFetchOutput($outputMain);
-
-    //     // 3B. Fetch 1-Hour Aggregation Data
-    //     $outputHourAvg = shell_exec(self::RRDTOOL_EXECUTABLE . " fetch \"$rrdFilePath\" AVERAGE $hourResolution $startTime $endTime $dsnListAvg");
-    //     $outputHourMin = shell_exec(self::RRDTOOL_EXECUTABLE . " fetch \"$rrdFilePath\" MIN $hourResolution $startTime $endTime $dsnListAvg");
-    //     $outputHourMax = shell_exec(self::RRDTOOL_EXECUTABLE . " fetch \"$rrdFilePath\" MAX $hourResolution $startTime $endTime $dsnListAvg");
-
-    //     $parsedDataHourAvg = $this->parseRrdFetchOutput($outputHourAvg);
-    //     $parsedDataHourMin = $this->parseRrdFetchOutput($outputHourMin);
-    //     $parsedDataHourMax = $this->parseRrdFetchOutput($outputHourMax);
-
-
-
-
-    //     $summary = $this->calculateComprehensiveSummary(
-    //         $parsedDataMain,
-    //         $parsedDataHourAvg,
-    //         $parsedDataHourMin,
-    //         $parsedDataHourMax
-    //     );
-
-    //     // Pass $endUnix (now UTC) to correctly cap the final outage.
-    //     $outageAnalysis = $this->analyzeOutageGaps($parsedDataMain, $endUnix);
-
-
-    //     // --- 5. Return Response ---
     //     return response()->json([
     //         'status' => 'success',
-    //         'metric_type' => 'ICMP Performance (Comprehensive)',
-    //         'device_ip' => $defaultHostIp,
-    //         'rrd_file_used' => $rrdFilePath,
+    //         'hosts' => $nasIps->values(),
+    //         'data' => $results,
     //         'requested_range' => [
-    //             'start_datetime' => $startDateString,
-    //             'end_datetime' => $endDateString,
-    //             // Return the UTC Unix timestamps used for RRDtool for debugging
-    //             'start_unix_utc' => $startUnix,
-    //             'end_unix_utc' => $endUnix,
+    //             'start_datetime' => $startDate->format('Y-m-d H:i:s'),
+    //             'end_datetime' => $endDate->format('Y-m-d H:i:s'),
     //         ],
-    //         'icmp_summary' => $summary,
-    //         'outage_analysis' => $outageAnalysis,
-    //         'time_series_raw' => $parsedDataMain,
     //     ]);
     // }
 
-//    public function getIcmpPerformanceData(string $startDateString = null, string $endDateString = null): JsonResponse
-//    {
-//        // --- 1. Load NAS IPs mapped to activation_plan_id ---
-//        $nasIps = DB::connection('pgsql')
-//            ->table('partner_activation_plans')
-//            ->pluck('nas_ip', 'id') // key = activation_plan_id
-//            ->filter()
-//            ->unique();
-//
-//        if ($nasIps->isEmpty()) {
-//            return response()->json(['status' => 'error', 'message' => 'No NAS IPs found.'], 404);
-//        }
-//
-//        $startDateString = $startDateString ?? '2025-10-14 17:25:00';
-//        $endDateString   = $endDateString ?? '2025-10-15 17:25:00';
-//
-//        $localTimezone = new DateTimeZone('Asia/Dhaka');
-//        $utcTimezone   = new DateTimeZone('UTC');
-//
-//        try {
-//            $startDateTime = new DateTime($startDateString, $localTimezone);
-//            $endDateTime   = new DateTime($endDateString, $localTimezone);
-//        } catch (\Exception $e) {
-//            return response()->json(['status' => 'error', 'message' => 'Invalid datetime format.'], 400);
-//        }
-//
-//        $startDateTime->setTimezone($utcTimezone);
-//        $endDateTime->setTimezone($utcTimezone);
-//
-//        $startUnix = $startDateTime->getTimestamp();
-//        $endUnix   = $endDateTime->getTimestamp();
-//
-//        if ($startUnix >= $endUnix) {
-//            return response()->json(['status' => 'error', 'message' => 'Start time must be before end time.'], 400);
-//        }
-//
-//        $startTime = '-s ' . $startUnix;
-//        $endTime   = '-e ' . $endUnix;
-//        $fullResolution = '-r 300';
-//        $hourResolution = '-r 3600';
-//        $dsnListFull = 'avg max min xmt rcv';
-//        $dsnListAvg  = 'avg';
-//
-//        $results = [];
-//
-//        foreach ($nasIps as $activationPlanId => $nasIp) {
-//
-//            $rrdFilePath = "/var/www/html/nttn-monitoring-application/partner-backend/storage/rrd/rrd/{$nasIp}/icmp-perf.rrd";
-//
-//            // --- Fetch 5-min resolution main data ---
-//            $outputMain = shell_exec(self::RRDTOOL_EXECUTABLE . " fetch \"$rrdFilePath\" AVERAGE $fullResolution $startTime $endTime $dsnListFull");
-//            if ($outputMain === null || trim($outputMain) === '') continue;
-//            $parsedDataMain = $this->parseRrdFetchOutput($outputMain);
-//
-//            // --- Fetch 1-hour aggregated avg/min/max ---
-//            $parsedDataHourAvg = $this->parseRrdFetchOutput(shell_exec(self::RRDTOOL_EXECUTABLE . " fetch \"$rrdFilePath\" AVERAGE $hourResolution $startTime $endTime $dsnListAvg"));
-//            $parsedDataHourMin = $this->parseRrdFetchOutput(shell_exec(self::RRDTOOL_EXECUTABLE . " fetch \"$rrdFilePath\" MIN $hourResolution $startTime $endTime $dsnListAvg"));
-//            $parsedDataHourMax = $this->parseRrdFetchOutput(shell_exec(self::RRDTOOL_EXECUTABLE . " fetch \"$rrdFilePath\" MAX $hourResolution $startTime $endTime $dsnListAvg"));
-//
-//            // --- Calculate summary & outages ---
-//            $summary = $this->calculateComprehensiveSummary($parsedDataMain, $parsedDataHourAvg, $parsedDataHourMin, $parsedDataHourMax);
-//            $outageAnalysis = $this->analyzeOutageGaps($parsedDataMain, $endUnix);
-//
-//            // --- Insert max RTT into NasIcmpLatency ---
-//            $maxRtt = $summary['rtt_loss_high_res']['rtt_ms'] ?? [];
-//            if (!empty($maxRtt['max']) && !empty($maxRtt['max_timestamp'])) {
-//                NasIcmpLatency::on('pgsql')->updateOrCreate(
-//                    [
-//                        'activation_plan_id' => $activationPlanId,
-//                        'collected_at' => $maxRtt['max_timestamp'],
-//                    ],
-//                    [
-//                        'threshold_exceeded_value' => $maxRtt['max'],
-//                    ]
-//                );
-//            }
-//
-//            // --- Insert outage periods into NasIcmpTimeout ---
-//            if (!empty($outageAnalysis['outage_periods'])) {
-//                foreach ($outageAnalysis['outage_periods'] as $outage) {
-//                    NasIcmpTimeout::on('pgsql')->updateOrCreate(
-//                        [
-//                            'activation_plan_id' => $activationPlanId,
-//                            'timeout_start' => $outage['start_time_formatted'],
-//                            'timeout_end' => $outage['end_time_formatted'],
-//                        ],
-//                        [
-//                            'timeout_duration' => $outage['duration_seconds'],
-//                        ]
-//                    );
-//                }
-//            }
-//
-//            $results[$nasIp] = [
-//                'activation_plan_id' => $activationPlanId,
-//                'icmp_summary' => $summary,
-//                'outage_analysis' => $outageAnalysis,
-//                'time_series_raw' => $parsedDataMain,
-//            ];
-//        }
-//
-//        return response()->json([
-//            'status' => 'success',
-//            'hosts' => $nasIps->values(),
-//            'data' => $results,
-//            'requested_range' => [
-//                'start_datetime' => $startDateString,
-//                'end_datetime' => $endDateString,
-//            ],
-//        ]);
-//    }
 
 
 
+    // librenms
 
     public function getIcmpPerformanceData(): JsonResponse
     {
-        // --- 1. Load NAS IPs ---
-        $nasIps = DB::connection('pgsql')
-            ->table('partner_activation_plans')
-            ->pluck('nas_ip', 'id') // key = activation_plan_id
-            ->filter()
-            ->unique();
-
-        if ($nasIps->isEmpty()) {
-            return response()->json(['status' => 'error', 'message' => 'No NAS IPs found.'], 404);
-        }
-
+        $remoteRrdBaseDir = '/opt/librenms/rrd/';
+        $remoteHost = '172.17.18.82';
+        $remotePort = 65122;
+        $remoteUser = 'linkmon';
+        $remotePass = '!TB5731roL#';
         $localTimezone = 'Asia/Dhaka';
         $utcTimezone   = 'UTC';
         $fullResolution = '-r 300';
@@ -2315,13 +2297,33 @@ class RrdController extends Controller
         $dsnListFull = 'avg max min xmt rcv';
         $dsnListAvg  = 'avg';
 
+        // --- 1. Load NAS IPs ---
+        $nasIps = DB::connection('pgsql')
+            ->table('partner_activation_plans')
+            ->pluck('nas_ip', 'id')
+            ->filter()
+            ->unique();
+
+        if ($nasIps->isEmpty()) {
+            return response()->json(['status' => 'error', 'message' => 'No NAS IPs found.'], 404);
+        }
+
+        // --- Initialize SFTP connection ---
+        $sftp = new SFTP($remoteHost, $remotePort);
+        if (!$sftp->login($remoteUser, $remotePass)) {
+            return response()->json([
+                'status' => 'error',
+                'message' => 'Failed to connect to remote RRD host via SFTP.'
+            ], 500);
+        }
+
         $results = [];
 
         foreach ($nasIps as $activationPlanId => $nasIp) {
             $nasIp = trim($nasIp);
             if (empty($nasIp)) continue;
 
-            // --- 2. Get latest latency and timeout ---
+            // --- 2. Get latest latency and timeout (UTC) ---
             $latestLatency = DB::connection('pgsql')
                 ->table('nas_icmp_latencies as c')
                 ->join('partner_activation_plans as p', 'c.activation_plan_id', '=', 'p.id')
@@ -2334,17 +2336,15 @@ class RrdController extends Controller
                 ->where('p.nas_ip', $nasIp)
                 ->max('c.created_at');
 
-            // --- 3. Determine start and end time ---
             $latestCreatedUnix = max(
-                $latestLatency ? strtotime($latestLatency) : 0,
-                $latestTimeout ? strtotime($latestTimeout) : 0
+                $latestLatency ? strtotime($latestLatency . ' UTC') : 0,
+                $latestTimeout ? strtotime($latestTimeout . ' UTC') : 0
             );
 
-            if ($latestCreatedUnix > 0) {
-                $startDate = Carbon::createFromTimestamp($latestCreatedUnix + 1, $localTimezone);
-            } else {
-                $startDate = Carbon::now($localTimezone)->subMinutes(30); // last 30 min if no record
-            }
+            // --- Determine start and end times per host ---
+            $startDate = $latestCreatedUnix > 0
+                ? Carbon::createFromTimestamp($latestCreatedUnix + 1, $localTimezone)
+                : Carbon::now($localTimezone)->subMinutes(30);
 
             $endDate = Carbon::now($localTimezone);
 
@@ -2353,75 +2353,83 @@ class RrdController extends Controller
                     'status' => 'info',
                     'message' => "No new ICMP data to process for host $nasIp",
                     'last_collected_at' => $latestCreatedUnix ? Carbon::createFromTimestamp($latestCreatedUnix, $localTimezone)->format('Y-m-d H:i:s') : null,
+                    'requested_range' => [
+                        'start_datetime' => $startDate->format('Y-m-d H:i:s'),
+                        'end_datetime' => $endDate->format('Y-m-d H:i:s'),
+                    ]
                 ];
                 continue;
             }
 
-            // --- 4. Convert to UTC UNIX timestamps for RRD ---
+            // --- 3. Convert to UTC UNIX timestamps for RRD ---
             $startUnix = $startDate->copy()->setTimezone($utcTimezone)->timestamp;
             $endUnix   = $endDate->copy()->setTimezone($utcTimezone)->timestamp;
             $startTime = '-s ' . $startUnix;
             $endTime   = '-e ' . $endUnix;
 
-            $rrdFilePath = "/var/www/html/nttn-monitoring-application/partner-backend/storage/rrd/rrd/{$nasIp}/icmp-perf.rrd";
+            $rrdDirectory = rtrim($remoteRrdBaseDir, '/') . '/' . $nasIp;
 
-            if (!is_file($rrdFilePath)) {
+            // --- Check remote directory existence ---
+            $remoteDirListing = $sftp->nlist($rrdDirectory);
+            if ($remoteDirListing === false || !in_array('icmp-perf.rrd', $remoteDirListing)) {
                 $results[$nasIp] = [
                     'status' => 'error',
-                    'message' => "RRD file not found for $nasIp",
+                    'message' => "RRD directory or file for host $nasIp not found. Checked: '$rrdDirectory/icmp-perf.rrd'",
+                    'requested_range' => [
+                        'start_datetime' => $startDate->format('Y-m-d H:i:s'),
+                        'end_datetime' => $endDate->format('Y-m-d H:i:s'),
+                    ]
                 ];
                 continue;
             }
 
-            // --- 5. Fetch RRD Data ---
-            $outputMain = shell_exec(self::RRDTOOL_EXECUTABLE . " fetch \"$rrdFilePath\" AVERAGE $fullResolution $startTime $endTime $dsnListFull");
+            $rrdFilePath = $rrdDirectory . '/icmp-perf.rrd';
+
+            // --- 4. Fetch RRD Data via SFTP ---
+            $outputMain = $sftp->exec(self::RRDTOOL_EXECUTABLE . " fetch \"$rrdFilePath\" AVERAGE $fullResolution $startTime $endTime $dsnListFull");
             if (!$outputMain || trim($outputMain) === '') continue;
             $parsedDataMain = $this->parseRrdFetchOutput($outputMain);
 
-            $parsedDataHourAvg = $this->parseRrdFetchOutput(shell_exec(self::RRDTOOL_EXECUTABLE . " fetch \"$rrdFilePath\" AVERAGE $hourResolution $startTime $endTime $dsnListAvg"));
-            $parsedDataHourMin = $this->parseRrdFetchOutput(shell_exec(self::RRDTOOL_EXECUTABLE . " fetch \"$rrdFilePath\" MIN $hourResolution $startTime $endTime $dsnListAvg"));
-            $parsedDataHourMax = $this->parseRrdFetchOutput(shell_exec(self::RRDTOOL_EXECUTABLE . " fetch \"$rrdFilePath\" MAX $hourResolution $startTime $endTime $dsnListAvg"));
+            $parsedDataHourAvg = $this->parseRrdFetchOutput($sftp->exec(self::RRDTOOL_EXECUTABLE . " fetch \"$rrdFilePath\" AVERAGE $hourResolution $startTime $endTime $dsnListAvg"));
+            $parsedDataHourMin = $this->parseRrdFetchOutput($sftp->exec(self::RRDTOOL_EXECUTABLE . " fetch \"$rrdFilePath\" MIN $hourResolution $startTime $endTime $dsnListAvg"));
+            $parsedDataHourMax = $this->parseRrdFetchOutput($sftp->exec(self::RRDTOOL_EXECUTABLE . " fetch \"$rrdFilePath\" MAX $hourResolution $startTime $endTime $dsnListAvg"));
 
-            // --- 6. Calculate summary & outages ---
+            // --- 5. Calculate summary & outages ---
             $summary = $this->calculateComprehensiveSummary($parsedDataMain, $parsedDataHourAvg, $parsedDataHourMin, $parsedDataHourMax);
-            $outageAnalysis = $this->analyzeOutageGaps($parsedDataMain, $endUnix, $localTimezone);
+            $outageAnalysis = $this->analyzeOutageGaps($parsedDataMain, $endUnix);
 
-            // --- 7. Insert/update NasIcmpLatency ---
+            // --- 6. Insert NasIcmpLatency if value exists ---
             $maxRtt = $summary['rtt_loss_high_res']['rtt_ms'] ?? [];
             if (!empty($maxRtt['max']) && !empty($maxRtt['max_timestamp'])) {
-                NasIcmpLatency::on('pgsql')->updateOrCreate(
-                    [
-                        'activation_plan_id' => $activationPlanId,
-                        'collected_at' => Carbon::createFromTimestamp($maxRtt['max_timestamp'], $localTimezone)->format('Y-m-d H:i:s'),
-                    ],
-                    [
-                        'threshold_exceeded_value' => $maxRtt['max'],
-                    ]
-                );
+                NasIcmpLatency::on('pgsql')->create([
+                    'activation_plan_id' => $activationPlanId,
+                    'collected_at' => Carbon::createFromTimestamp($maxRtt['max_timestamp'], $localTimezone)->format('Y-m-d H:i:s'),
+                    'threshold_exceeded_value' => $maxRtt['max'],
+                ]);
             }
 
-            // --- 8. Insert/update NasIcmpTimeout ---
+            // --- 7. Insert NasIcmpTimeouts ---
             if (!empty($outageAnalysis['outage_periods'])) {
                 foreach ($outageAnalysis['outage_periods'] as $outage) {
-                    NasIcmpTimeout::on('pgsql')->updateOrCreate(
-                        [
-                            'activation_plan_id' => $activationPlanId,
-                            'timeout_start' => Carbon::createFromTimestamp($outage['start_unix'], $localTimezone)->format('Y-m-d H:i:s'),
-                            'timeout_end'   => Carbon::createFromTimestamp($outage['end_unix'], $localTimezone)->format('Y-m-d H:i:s'),
-                        ],
-                        [
-                            'timeout_duration' => $outage['duration_seconds'],
-                        ]
-                    );
+                    NasIcmpTimeout::on('pgsql')->create([
+                        'activation_plan_id' => $activationPlanId,
+                        'timeout_start' => Carbon::createFromTimestamp($outage['start_time_unix'], $localTimezone)->format('Y-m-d H:i:s'),
+                        'timeout_end'   => Carbon::createFromTimestamp($outage['end_time_unix'], $localTimezone)->format('Y-m-d H:i:s'),
+                        'timeout_duration' => $outage['duration_seconds'],
+                    ]);
                 }
             }
 
-            // --- 9. Store results ---
+            // --- 8. Store results per host ---
             $results[$nasIp] = [
                 'activation_plan_id' => $activationPlanId,
                 'icmp_summary' => $summary,
                 'outage_analysis' => $outageAnalysis,
                 'time_series_raw' => $parsedDataMain,
+                'requested_range' => [
+                    'start_datetime' => $startDate->format('Y-m-d H:i:s'),
+                    'end_datetime' => $endDate->format('Y-m-d H:i:s'),
+                ],
             ];
         }
 
@@ -2429,10 +2437,6 @@ class RrdController extends Controller
             'status' => 'success',
             'hosts' => $nasIps->values(),
             'data' => $results,
-            'requested_range' => [
-                'start_datetime' => $startDate->format('Y-m-d H:i:s'),
-                'end_datetime' => $endDate->format('Y-m-d H:i:s'),
-            ],
         ]);
     }
 
@@ -2450,7 +2454,7 @@ class RrdController extends Controller
             return [];
         }
 
-        // --- Prepare Data (filtering out NaN for metrics) ---
+
         $avgRttData = array_column($parsedDataMain, 'avg');
         $minRttData = array_column($parsedDataMain, 'min');
         $maxRttData = array_column($parsedDataMain, 'max');
@@ -2462,7 +2466,7 @@ class RrdController extends Controller
         $minRttData = array_filter($minRttData, fn($value) => is_numeric($value) && $value !== null);
         $maxRttData = array_filter($maxRttData, fn($value) => is_numeric($value) && $value !== null);
 
-        // --- Find timestamps for min/max values ---
+
         $maxRttTimestamp = null;
         $minRttTimestamp = null;
         $maxRttValue = 0.0;
@@ -2473,7 +2477,7 @@ class RrdController extends Controller
             $timestamp = $dataPoint['timestamp_unix'] ?? null;
 
             if (is_numeric($currentAvg) && $timestamp) {
-                // Track maximum RTT
+
                 if ($currentAvg > $maxRttValue) {
                     $maxRttValue = $currentAvg;
                     $maxRttTimestamp = $timestamp;
@@ -2487,20 +2491,20 @@ class RrdController extends Controller
             }
         }
 
-        // --- RTT and Loss Summary (High Resolution) ---
+
         $rttSummary = [
             'cur' => !empty($avgRttData) ? round(end($avgRttData), 2) : 0.0,
             'min' => !empty($minRttData) ? round(min($minRttData), 2) : 0.0,
             'max' => !empty($maxRttData) ? round(max($maxRttData), 2) : 0.0,
             'avg' => !empty($avgRttData) ? round(array_sum($avgRttData) / count($avgRttData), 2) : 0.0,
-            // Add timestamps for min and max
+
             'min_timestamp' => $minRttTimestamp ? date('Y-m-d H:i:s', $minRttTimestamp) : null,
             'min_timestamp_unix' => $minRttTimestamp,
             'max_timestamp' => $maxRttTimestamp ? date('Y-m-d H:i:s', $maxRttTimestamp) : null,
             'max_timestamp_unix' => $maxRttTimestamp,
         ];
 
-        // Loss Summary
+
         $lossSeries = [];
         $maxLossTimestamp = null;
         $maxLossValue = 0.0;
@@ -2514,7 +2518,7 @@ class RrdController extends Controller
                 $currentLoss = round((($xmt - $rcv) / $xmt) * 100, 2);
                 $lossSeries[] = $currentLoss;
 
-                // Track maximum loss
+
                 if ($currentLoss > $maxLossValue) {
                     $maxLossValue = $currentLoss;
                     $maxLossTimestamp = $timestamp;
@@ -2529,23 +2533,23 @@ class RrdController extends Controller
             'min' => !empty($lossSeries) ? round(min($lossSeries), 2) : 0.0,
             'max' => !empty($lossSeries) ? round(max($lossSeries), 2) : 0.0,
             'avg' => !empty($lossSeries) ? round(array_sum($lossSeries) / count($lossSeries), 2) : 0.0,
-            // Add timestamp for maximum loss
+
             'max_timestamp' => $maxLossTimestamp ? date('Y-m-d H:i:s', $maxLossTimestamp) : null,
             'max_timestamp_unix' => $maxLossTimestamp,
         ];
 
-        // --- Ping Response Table (Yellow Box Data) ---
+
         $rttTableSummary = [
             'Now' => !empty($avgRttData) ? round(end($avgRttData), 2) : 0.0,
             'Min' => !empty($avgRttData) ? round(min($avgRttData), 2) : 0.0,
             'Max' => !empty($avgRttData) ? round(max($avgRttData), 2) : 0.0,
             'Avg' => !empty($avgRttData) ? round(array_sum($avgRttData) / count($avgRttData), 2) : 0.0,
-            // Add timestamps for Min and Max
+
             'min_timestamp' => $minRttTimestamp ? date('Y-m-d H:i:s', $minRttTimestamp) : null,
             'max_timestamp' => $maxRttTimestamp ? date('Y-m-d H:i:s', $maxRttTimestamp) : null,
         ];
 
-        // 1-Hour Aggregation Rows
+
         $hourAvgData = array_filter(array_column($parsedDataHourAvg, 'avg'), fn($v) => is_numeric($v) && $v !== null);
         $hourMinData = array_filter(array_column($parsedDataHourMin, 'avg'), fn($v) => is_numeric($v) && $v !== null);
         $hourMaxData = array_filter(array_column($parsedDataHourMax, 'avg'), fn($v) => is_numeric($v) && $v !== null);
@@ -2556,7 +2560,7 @@ class RrdController extends Controller
             '1_hour_max' => $this->getAggregatedSummary($hourMaxData, $parsedDataHourMax),
         ];
 
-        // Percentiles
+
         $sortedCoreRttData = $avgRttData;
         sort($sortedCoreRttData);
 
@@ -2566,7 +2570,7 @@ class RrdController extends Controller
             '75th_Percentile' => round($this->calculatePercentile($sortedCoreRttData, 75), 6),
         ];
 
-        // Combine all summaries
+
         return [
             'rtt_loss_high_res' => ['rtt_ms' => $rttSummary, 'loss_percent' => $lossSummary],
             'ping_response_table' => [
@@ -2577,15 +2581,6 @@ class RrdController extends Controller
         ];
     }
 
-    // protected function getAggregatedSummary(array $data): array
-    // {
-    //     return [
-    //         'Now' => !empty($data) ? round(end($data), 2) : 0.0,
-    //         'Min' => !empty($data) ? round(min($data), 2) : 0.0,
-    //         'Max' => !empty($data) ? round(max($data), 2) : 0.0,
-    //         'Avg' => !empty($data) ? round(array_sum($data) / count($data), 2) : 0.0,
-    //     ];
-    // }
 
     protected function getAggregatedSummary(array $data, array $parsedData = []): array
     {
