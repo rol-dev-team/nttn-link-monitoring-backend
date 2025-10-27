@@ -7,7 +7,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 class NasInterfaceUtilization extends Model
 {
-    protected $table = 'nas_interface_utilization';
+    protected $table = 'nas_interface_utilizations';
 
     protected $fillable = [
         'activation_plan_id',
