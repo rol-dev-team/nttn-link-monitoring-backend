@@ -61,6 +61,15 @@ return [
             ]) : [],
         ],
 
+        'librenms' => [
+            'driver' => 'mysql', // or whatever driver you're using
+            'host' => env('LIBRE_DB_HOST', '172.17.18.82'),
+            'port' => env('LIBRE_DB_PORT', '3306'),
+            'database' => env('LIBRE_DB_DATABASE', 'librenms'),
+            'username' => env('LIBRE_DB_USERNAME', 'librenms'),
+            'password' => env('LIBRE_DB_PASSWORD', '!TBN$$nl1nK'),
+        ],
+
         'mariadb' => [
             'driver' => 'mariadb',
             'url' => env('DB_URL'),
