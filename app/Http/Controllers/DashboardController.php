@@ -11,6 +11,28 @@ use Illuminate\Support\Facades\DB;
 
 class DashboardController extends Controller
 {
+
+    public function getSummary()
+    {
+        $data = PartnerInfo::all();
+
+        return response()->json([
+            'status' => true,
+            'message' => 'Retrieved successfully.',
+            'data' => $data
+        ], 200);
+    }
+
+    public function getSummaryDetails(Request $request)
+    {
+        $data = PartnerInfo::all();
+
+        return response()->json([
+            'status' => true,
+            'message' => 'Retrieved successfully.',
+            'data' => $data
+        ], 200);
+    }
     public function getPartnerInfos()
     {
         $data = PartnerInfo::all();

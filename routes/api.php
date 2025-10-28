@@ -28,6 +28,16 @@ Route::get('/rrd-storage-utilization', [RrdController::class, 'getSystemDiskStor
 Route::get('/rrd-icmp-utilization', [RrdController::class, 'getIcmpPerformanceData']);
 
 
+Route::prefix('dashboard')->group(function () {
+    Route::get('/summary', [DashboardController::class, 'getSummary']);
+    Route::get('/summary/details', [DashboardController::class, 'getSummaryDetails']);
+    Route::get('/partner-infos', [DashboardController::class, 'getPartnerInfos']);
+    Route::get('/aggregators', [DashboardController::class, 'getAggregators']);
+    Route::get('/max-utilization-alert', [DashboardController::class, 'getMaxUtilizationAlert']);
+    Route::get('/min-utilization-alert', [DashboardController::class, 'getMinUtilizationAlert']);
+    Route::get('/icmp-alert', [DashboardController::class, 'getICMPAlert']);
+    Route::get('/utilization/min-max/last-seven-days', [DashboardController::class, 'getMinMaxUtilizationLastSevenDays']);
+});
 
 // ----------------------------
 // Public routes (no auth) - MINIMAL SET
@@ -308,14 +318,14 @@ Route::middleware('auth:sanctum')->group(function () {
         ->middleware('permission:pages.update')->name('pages.update-roles');
 
 
-    Route::prefix('dashboard')->group(function () {
-        Route::get('/partner-infos', [DashboardController::class, 'getPartnerInfos']);
-        Route::get('/aggregators', [DashboardController::class, 'getAggregators']);
-        Route::get('/max-utilization-alert', [DashboardController::class, 'getMaxUtilizationAlert']);
-        Route::get('/min-utilization-alert', [DashboardController::class, 'getMinUtilizationAlert']);
-        Route::get('/icmp-alert', [DashboardController::class, 'getICMPAlert']);
-        Route::get('/utilization/min-max/last-seven-days', [DashboardController::class, 'getMinMaxUtilizationLastSevenDays']);
-    });
+    // Route::prefix('dashboard')->group(function () {
+    //     Route::get('/partner-infos', [DashboardController::class, 'getPartnerInfos']);
+    //     Route::get('/aggregators', [DashboardController::class, 'getAggregators']);
+    //     Route::get('/max-utilization-alert', [DashboardController::class, 'getMaxUtilizationAlert']);
+    //     Route::get('/min-utilization-alert', [DashboardController::class, 'getMinUtilizationAlert']);
+    //     Route::get('/icmp-alert', [DashboardController::class, 'getICMPAlert']);
+    //     Route::get('/utilization/min-max/last-seven-days', [DashboardController::class, 'getMinMaxUtilizationLastSevenDays']);
+    // });
 
     // ----------------------------
     // Sync Permissions
