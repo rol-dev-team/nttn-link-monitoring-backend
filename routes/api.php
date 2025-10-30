@@ -6,6 +6,7 @@ use App\Http\Controllers\Api\UserController;
 use App\Http\Controllers\Api\RoleController;
 use App\Http\Controllers\Api\PermissionController;
 use App\Http\Controllers\Api\PageElementController;
+use App\Http\Controllers\BWRateController;
 use Illuminate\Support\Facades\Artisan;
 use App\Http\Controllers\TechnicalKamController;
 use App\Http\Controllers\RadiusServerIpController;
@@ -15,7 +16,7 @@ use App\Http\Controllers\PartnerInterfaceConfigController;
 use App\Http\Controllers\PartnerDropDeviceConfigController;
 use App\Http\Controllers\CapacityAlertConfigController;
 use App\Http\Controllers\IcmpAlertConfigController;
-
+use App\Http\Controllers\SurveyController;
 use App\Http\Controllers\RrdController;
 
 // ----------------------------
@@ -36,6 +37,14 @@ Route::get('/rrd-icmp-utilization', [RrdController::class, 'getIcmpPerformanceDa
 Route::post('/login', [AuthController::class, 'login']);
 Route::get('/role', [RoleController::class, 'index']);
 
+
+// BW Rate
+Route::post('/bw-rates', [BWRateController::class, 'store']);
+Route::get('/bw-rates', [BWRateController::class, 'index']);
+//  Survey
+Route::post('/surveys', [SurveyController::class, 'store']);
+Route::get('/surveys', [SurveyController::class, 'index']);
+Route::post('/category-wise-client-details', [SurveyController::class, 'getClientDetailsByClientAndCategory']);
 
 Route::middleware('auth:sanctum')->get('/token-check', fn() => response()->json(['valid' => true]));
 
@@ -306,6 +315,7 @@ Route::middleware('auth:sanctum')->group(function () {
 
     Route::put('/page-elements/{pageElement}/roles', [PageElementController::class, 'updateRoles'])
         ->middleware('permission:pages.update')->name('pages.update-roles');
+
 
 
     // ----------------------------
